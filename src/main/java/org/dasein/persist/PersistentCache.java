@@ -1004,6 +1004,30 @@ public abstract class PersistentCache<T extends CachedItem> {
                         }
                         dataStoreValue = replacement;
                     }
+                    else if( float.class.isAssignableFrom(t)  ) {
+                        float[] replacement = (float[])Array.newInstance(float.class, arr.length());
+
+                        for( int i = 0; i<arr.length(); i++ ) {
+                            replacement[i] = (Float)mapValue(fieldName, arr.get(i), t, null);
+                        }
+                        dataStoreValue = replacement;
+                    }
+                    else if( double.class.isAssignableFrom(t)  ) {
+                        double[] replacement = (double[])Array.newInstance(double.class, arr.length());
+
+                        for( int i = 0; i<arr.length(); i++ ) {
+                            replacement[i] = (Double)mapValue(fieldName, arr.get(i), t, null);
+                        }
+                        dataStoreValue = replacement;
+                    }
+                    else if( boolean.class.isAssignableFrom(t)  ) {
+                        boolean[] replacement = (boolean[])Array.newInstance(boolean.class, arr.length());
+
+                        for( int i = 0; i<arr.length(); i++ ) {
+                            replacement[i] = (Boolean)mapValue(fieldName, arr.get(i), t, null);
+                        }
+                        dataStoreValue = replacement;
+                    }
                     else {
                         Object[] replacement = (Object[])Array.newInstance(t, arr.length());
                     
