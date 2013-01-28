@@ -162,7 +162,7 @@
                 </excludes>
                 <properties>
                     <year>1998-2011</year>
-                    <copyrightHolder>enStratusNetworks LLC</copyrightHolder>
+                    <copyrightHolder>enStratus Networks Inc</copyrightHolder>
                 </properties>
             </configuration>
         </plugin>
@@ -191,7 +191,7 @@
         <version>2.6</version>
         <configuration>
           <includes>
-            <include>**/RiakTestCase.java</include>
+            <!-- <include>**/RiakTestCase.java</include> -->
           </includes>
         </configuration>
       </plugin>

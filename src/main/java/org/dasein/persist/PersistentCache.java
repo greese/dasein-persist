@@ -1157,6 +1157,22 @@ public abstract class PersistentCache<T extends CachedItem> {
                         replacement[i] = toJSONValue(original[i]);
                     }
                 }
+                else if( value.getClass().getComponentType().equals(float.class) ) {
+                    float[] original = (float[])value;
+
+                    replacement = new Object[original.length];
+                    for( int i=0; i<original.length; i++ ) {
+                        replacement[i] = toJSONValue(original[i]);
+                    }
+                }
+                else if( value.getClass().getComponentType().equals(double.class) ) {
+                    double[] original = (double[])value;
+
+                    replacement = new Object[original.length];
+                    for( int i=0; i<original.length; i++ ) {
+                        replacement[i] = toJSONValue(original[i]);
+                    }
+                }
                 else {
                     Object[] original = (Object[])value;
 
