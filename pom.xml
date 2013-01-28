@@ -191,7 +191,7 @@
         <version>2.6</version>
         <configuration>
           <includes>
-            <!-- <include>**/RiakTestCase.java</include> -->
+            <include>**/RiakTestCase.java</include>
           </includes>
         </configuration>
       </plugin>
