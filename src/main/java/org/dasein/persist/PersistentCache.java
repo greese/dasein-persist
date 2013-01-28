@@ -411,7 +411,12 @@ public abstract class PersistentCache<T extends CachedItem> {
                 Field field = null;
 
                 while( field == null ) {
-                    field = t.getDeclaredField(fieldName);
+                    try {
+                        field = t.getDeclaredField(fieldName);
+                    }
+                    catch( NoSuchFieldException ignore ) {
+                        // ignore
+                    }
                     if( field == null ) {
                         t = t.getSuperclass();
                         if( t.getName().equals(Object.class.getName()) ) {
