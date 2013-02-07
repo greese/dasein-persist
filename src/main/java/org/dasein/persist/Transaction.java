@@ -374,6 +374,7 @@ public class Transaction {
                 state = "CLOSING CONNECTIONS";
                 connection.close();
                 connection = null;
+                logger.warn("DPTRANSID-" + transactionId + " connection.close - " + (System.currentTimeMillis() - openTime) + "ms");
                 final int numConnections = connections.decrementAndGet();
                 if( logger.isInfoEnabled() ) {
                     logger.info("Reduced the number of connections from " + (numConnections+1) + " due to commit.");
@@ -638,7 +639,6 @@ public class Transaction {
                 return;
             }
             state = "OPENING";
-            openTime = System.currentTimeMillis();
             if( logger.isDebugEnabled() ) {
                 logger.debug("Opening " + transactionId);
             }
@@ -653,6 +653,7 @@ public class Transaction {
                 ds = (DataSource)ctx.lookup(dsn);
                 conn = ds.getConnection();
                 openTime = System.currentTimeMillis();
+                logger.warn("DPTRANSID-" + transactionId + " connection.get - dsn='" + dsn + '\'');
                 if( logger.isDebugEnabled() ) {
                     logger.debug("Got connection for " + transactionId + ": " + conn);
                 }            
@@ -765,6 +766,7 @@ public class Transaction {
             }
             try {
                 connection.close();
+                logger.warn("DPTRANSID-" + transactionId + " connection.close - " + (System.currentTimeMillis() - openTime) + "ms");
             }
             catch( SQLException e )
             {
