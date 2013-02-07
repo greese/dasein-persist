@@ -288,7 +288,7 @@ public class Transaction {
     private int        transactionId;
 
     private StackTraceElement[] stackTrace;
-    
+
     /**
      * Constructs a transaction object having the specified transaction ID.
      * @param xid the transaction ID that identifies the transaction
@@ -374,7 +374,7 @@ public class Transaction {
                 state = "CLOSING CONNECTIONS";
                 connection.close();
                 connection = null;
-                logger.warn("DPTRANSID-" + transactionId + " connection.close - " + (System.currentTimeMillis() - openTime) + "ms");
+                logger.warn(connectionCloseLog());
                 final int numConnections = connections.decrementAndGet();
                 if( logger.isInfoEnabled() ) {
                     logger.info("Reduced the number of connections from " + (numConnections+1) + " due to commit.");
@@ -685,6 +685,19 @@ public class Transaction {
             logger.debug("exit - open(Execution)");
         }
     }
+
+    private String connectionCloseLog() {
+        String log = "DPTRANSID-" + transactionId + " connection.close - duration=" + (System.currentTimeMillis() - openTime) + "ms - stmt='";
+        String stmt = statements.peek();
+        if (stmt != null) {
+            if (stmt.length() < 100) {
+                log = log + stmt.substring(0,stmt.length());
+            } else {
+                log = log + stmt.substring(0,100);
+            }
+        }
+        return log + '\'';
+    }
     
     private void printElement(StackTraceElement element) {
         int no = element.getLineNumber();
@@ -766,7 +779,7 @@ public class Transaction {
             }
             try {
                 connection.close();
-                logger.warn("DPTRANSID-" + transactionId + " connection.close - " + (System.currentTimeMillis() - openTime) + "ms");
+                logger.warn(connectionCloseLog());
             }
             catch( SQLException e )
             {
