@@ -802,7 +802,7 @@ public class Transaction {
     }
 
     static boolean isAltMaid() {
-        return properties.contains(ALTMAID_ENABLED);
+        return properties.containsKey(ALTMAID_ENABLED);
     }
 
     static boolean isAltMaidEnabled() {
