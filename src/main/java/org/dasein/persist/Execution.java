@@ -43,7 +43,9 @@ import org.apache.log4j.Logger;
 import org.dasein.persist.dao.LoadTranslator;
 import org.dasein.persist.dao.RemoveTranslator;
 import org.dasein.persist.dao.SaveTranslator;
+import org.dasein.util.DaseinUtilProperties;
 import org.dasein.util.Translator;
+import org.dasein.util.tasks.DaseinUtilTasks;
 
 /**
  * Represents a database event, generally a specific query or update.
@@ -88,6 +90,7 @@ public abstract class Execution {
                 String path = System.getenv(DASEIN_PERSIST_PROPERTIES);
                 if (path != null && !path.isEmpty()) {
                     is = new FileInputStream(path);
+                    // 'is' is ignore, todo
                 }
             }
             propenum = props.propertyNames();
@@ -105,18 +108,30 @@ public abstract class Execution {
         catch( Exception e ) {
             e.printStackTrace();
         }
-        Thread stackPusher = new Thread() {
-            public void run() {
-                pushExecutions();
-            }
-        };
-        
-        stackPusher.setPriority(Thread.NORM_PRIORITY-1);
-        stackPusher.setDaemon(true);
-        stackPusher.setName("dasein-persistence - STACK PUSHER");
-        stackPusher.start();
+
+        if (DaseinUtilProperties.isTaskSystemEnabled()) {
+            DaseinUtilTasks.submit(new ExecutionTask());
+        } else {
+            Thread stackPusher = new Thread() {
+                public void run() {
+                    pushExecutions();
+                }
+            };
+
+            stackPusher.setPriority(Thread.NORM_PRIORITY-1);
+            stackPusher.setDaemon(true);
+            stackPusher.setName("dasein-persistence - STACK PUSHER");
+            stackPusher.start();
+        }
     }
-    
+
+    private static class ExecutionTask implements Runnable {
+        @Override
+        public void run() {
+            pushExecutions();
+        }
+    }
+
     static public String getDataSourceName(String cname) {
         return getDataSourceName(cname, false);
     }

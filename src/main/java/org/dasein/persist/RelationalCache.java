@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
+import org.dasein.util.DaseinUtilProperties;
 import org.dasein.util.Jiterator;
 import org.dasein.persist.jdbc.Counter;
 import org.dasein.persist.jdbc.Creator;
@@ -37,6 +38,7 @@ import org.dasein.util.CachedItem;
 import org.dasein.util.CacheManagementException;
 import org.dasein.util.JitCollection;
 import org.dasein.util.JiteratorFilter;
+import org.dasein.util.tasks.DaseinUtilTasks;
 
 public final class RelationalCache<T extends CachedItem> extends PersistentCache<T> {
     static public final Logger logger = Logger.getLogger(RelationalCache.class);
@@ -445,6 +447,39 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
         }
         return params;
     }
+
+    private class RelationalCacheTask implements Runnable {
+        private final Jiterator<T> it;
+        private final Map<String,Object> results;
+
+        private RelationalCacheTask(Jiterator<T> it, Map<String,Object> results) {
+            this.it = it;
+            this.results = results;
+        }
+
+        @Override
+        public void run() {
+            try {
+                for( Map<String,Object> map: (Collection<Map<String,Object>>)this.results.get(Loader.LISTING) ) {
+                    for( String fieldName : map.keySet() ) {
+                        LookupDelegate delegate = getLookupDelegate(fieldName);
+
+                        if( delegate != null && !delegate.validate((String)map.get(fieldName)) ) {
+                            throw new PersistenceException("Unable to validate " + fieldName + " value of " + map.get(fieldName));
+                        }
+                    }
+                    this.it.push(getCache().find(map));
+                }
+                this.it.complete();
+            }
+            catch( Exception e ) {
+                this.it.setLoadException(e);
+            }
+            catch( Throwable t ) {
+                this.it.setLoadException(new RuntimeException(t));
+            }
+        }
+    }
     
     @SuppressWarnings("unchecked")
     private Collection<T> load(Loader loader, JiteratorFilter<T> filter, Map<String,Object> params) throws PersistenceException {
@@ -459,6 +494,11 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
                 
                 results = xaction.execute(loader, params, readDataSource);
                 xaction.commit();
+
+                if (DaseinUtilProperties.isTaskSystemEnabled()) {
+                    DaseinUtilTasks.submit(new RelationalCacheTask(it, results));
+                    return new JitCollection<T>(it, getEntityClassName());
+                }
                 Thread t = new Thread() {
                     public void run() {
                         try {
