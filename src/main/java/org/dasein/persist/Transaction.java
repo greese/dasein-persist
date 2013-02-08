@@ -89,6 +89,15 @@ public class Transaction {
     static public final String ALTMAID_MAXSECONDS = "dasein.persist.altmaid.maxseconds";
     static public final String ALTMAID_WARNSECONDS = "dasein.persist.altmaid.warnseconds";
 
+    static private final boolean tracking;
+    static {
+        loadProperties();
+        if (isAltMaid()) {
+            tracking = isAltMaidEnabled();
+        } else {
+            tracking = true;
+        }
+    }
 
     /**
      * Cleans up transactions that somehow never got cleaned up.
@@ -336,10 +345,12 @@ public class Transaction {
             logger.debug("return - close()");
         }
         finally {
-            if( logger.isDebugEnabled() ) {
-                logger.debug("Removing transaction: " + transactionId);
+            if (tracking) {
+                if( logger.isDebugEnabled() ) {
+                    logger.debug("Removing transaction: " + transactionId);
+                }
+                transactions.remove(new Integer(transactionId));
             }
-            transactions.remove(new Integer(transactionId));
             logger.debug("exit - close()");
             events.clear();
             statements.clear();
@@ -375,9 +386,11 @@ public class Transaction {
                 connection.close();
                 connection = null;
                 logger.warn(connectionCloseLog());
-                final int numConnections = connections.decrementAndGet();
-                if( logger.isInfoEnabled() ) {
-                    logger.info("Reduced the number of connections from " + (numConnections+1) + " due to commit.");
+                if (tracking) {
+                    final int numConnections = connections.decrementAndGet();
+                    if( logger.isInfoEnabled() ) {
+                        logger.info("Reduced the number of connections from " + (numConnections+1) + " due to commit.");
+                    }
                 }
                 if( logger.isDebugEnabled() ) {
                     logger.debug("Releasing: " + transactionId);
@@ -666,19 +679,21 @@ public class Transaction {
             conn.setAutoCommit(false);
             conn.setReadOnly(readOnly);
             connection = conn;
-            final int numConnections = connections.incrementAndGet();
-            final int numHighPoint = highPoint.get();
-            if( logger.isInfoEnabled() ) {
-                logger.info("Incremented connection count to " + numConnections);
-            }
-            if( numConnections > numHighPoint) {
-                if (highPoint.compareAndSet(numHighPoint, numConnections)) {
-                    if( logger.isInfoEnabled() ) {
-                        logger.info("A NEW CONNECTION HIGH POINT HAS BEEN REACHED: " + highPoint);
+            if (tracking) {
+                final int numConnections = connections.incrementAndGet();
+                final int numHighPoint = highPoint.get();
+                if( logger.isInfoEnabled() ) {
+                    logger.info("Incremented connection count to " + numConnections);
+                }
+                if( numConnections > numHighPoint) {
+                    if (highPoint.compareAndSet(numHighPoint, numConnections)) {
+                        if( logger.isInfoEnabled() ) {
+                            logger.info("A NEW CONNECTION HIGH POINT HAS BEEN REACHED: " + highPoint);
+                        }
                     }
                 }
+                transactions.put(new Integer(transactionId), this);
             }
-            transactions.put(new Integer(transactionId), this);
             logger.debug("return - open(Execution)");
         }
         finally {
@@ -786,9 +801,11 @@ public class Transaction {
                 logger.error("Problem closing connection: " + e.getMessage(), e);
             }
             connection = null;
-            final int numConnections = connections.decrementAndGet();
-            if( logger.isInfoEnabled() ) {
-                logger.info("Reducing the number of connections from " + (numConnections+1) + " due to rollback.");
+            if (tracking) {
+                final int numConnections = connections.decrementAndGet();
+                if( logger.isInfoEnabled() ) {
+                    logger.info("Reducing the number of connections from " + (numConnections+1) + " due to rollback.");
+                }
             }
             close();
             dirty = true;
