@@ -122,7 +122,7 @@ public final class PersistentFactory<T> {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem reading " + DaseinSequencer.PROPERTIES + ": " + e.getMessage(), e);
         }
         classDirectory = props.getProperty("dasein.persist.classes");
         persistenceLib = props.getProperty("dasein.persist.persistenceLib");
@@ -415,7 +415,7 @@ public final class PersistentFactory<T> {
                 writer.close();
             }
             catch( IOException e ) {
-                e.printStackTrace();
+                logger.error(e.getMessage(), e);
                 throw new PersistenceException(e.getMessage());
             }
 
@@ -441,14 +441,14 @@ public final class PersistentFactory<T> {
                 com.sun.tools.javac.Main.compile(new String[] { "-classpath", dsnJar, "-d", classDirectory, src.getAbsolutePath() });
             }
             catch( Throwable t ) {
-                t.printStackTrace();
+                logger.error(t.getMessage(), t);
                 throw new PersistenceException(t.getMessage());
             }
             try {
                 return (Class<? extends Execution>)Class.forName(fcn);
             }
             catch( Throwable t) {
-                t.printStackTrace();
+                logger.error(t.getMessage(), t);
                 throw new PersistenceException(t.getMessage());
             }
         }
@@ -1511,7 +1511,7 @@ public final class PersistentFactory<T> {
                             list = PersistentFactory.this.load(singletons.get(args[0]), null, terms);
                         }
                         catch( Throwable forgetIt ) {
-                            e.printStackTrace();
+                            logger.error(forgetIt.getMessage(), forgetIt);
                             throw new RuntimeException(e);
                         }
                     }
@@ -1549,7 +1549,7 @@ public final class PersistentFactory<T> {
                     throw (PersistenceException)t;
                 }
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(e.getMessage(), e);
                 }
                 throw new PersistenceException(e);
             }
@@ -1994,7 +1994,7 @@ public final class PersistentFactory<T> {
                         return;
                     }
                     else if( ts.longValue() < lm.longValue() ) {
-                        System.err.println("Potential conflict in " + t.getName() + " (" + lm + ") factory for " + state);
+                        logger.warn("Potential conflict in " + t.getName() + " (" + lm + ") factory for " + state);
                         return;
                     }
                 }
@@ -2171,7 +2171,7 @@ public final class PersistentFactory<T> {
                 }
             }
             catch( IOException e ) {
-                e.printStackTrace();
+                logger.error(e.getMessage(), e);
                 throw new PersistenceException(e);
             }
         }

@@ -79,7 +79,7 @@ public class DatabaseKeyGenerator extends Sequencer {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            Logger.getLogger(DatabaseKeyGenerator.class).error("Problem loading " + PROPERTIES + ": " + e.getMessage(), e);
         }
         dsn = props.getProperty("dasein.seqdsn");
         dataSourceName = dsn;
@@ -155,9 +155,11 @@ public class DatabaseKeyGenerator extends Sequencer {
                     }
                 }
                 catch( SQLException e ) {
-                    logger.warn("insert(): Error inserting row into database, possible concurrency issue: " + e.getMessage());
+                    String err = "insert(): Error inserting row into database, possible concurrency issue: " + e.getMessage();
                     if( logger.isDebugEnabled() ) {
-                        e.printStackTrace();
+                        logger.warn(err, e);
+                    } else {
+                        logger.warn(err);
                     }
                     nextId = -1L;
                 }
@@ -209,16 +211,20 @@ public class DatabaseKeyGenerator extends Sequencer {
                     update();
                 }
                 catch( SQLException e ) {
-                    logger.error("next(): Failed to update key space: " + e.getMessage());
+                    String err = "next(): Failed to update key space: " + e.getMessage();
                     if( logger.isDebugEnabled() ) {
-                        e.printStackTrace();
+                        logger.error(err, e);
+                    } else {
+                        logger.error(err);
                     }
                     throw new PersistenceException(e);
                 }
                 catch( NamingException e ) {
-                    logger.error("next(): Failed to update key space: " + e.getMessage());
+                    String err = "next(): Failed to update key space: " + e.getMessage();
                     if( logger.isDebugEnabled() ) {
-                        e.printStackTrace();
+                        logger.error(err, e);
+                    } else {
+                        logger.error(err);
                     }
                     throw new PersistenceException(e);
                 }

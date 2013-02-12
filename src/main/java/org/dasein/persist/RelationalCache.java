@@ -336,7 +336,7 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
                             list = RelationalCache.this.load(getLoader(terms, null), null, toParams(terms));
                         }
                         catch( Throwable forgetIt ) {
-                            e.printStackTrace();
+                            logger.error(forgetIt.getMessage(), forgetIt);
                             throw new RuntimeException(e);
                         }
                     }
@@ -360,7 +360,7 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
                     throw (PersistenceException)t;
                 }
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(e.getMessage(), e);
                 }
                 throw new PersistenceException(e);
             }

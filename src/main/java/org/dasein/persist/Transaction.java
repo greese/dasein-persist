@@ -126,7 +126,7 @@ public class Transaction {
             }
             for( Transaction xaction: closing ) {
                 logger.warn("Encountered a stale transaction (" + xaction.transactionId + "), forcing a close: " + xaction.state);
-                xaction.printStackTrace();
+                xaction.logStackTrace();
                 xaction.close();
             }
         }
@@ -171,18 +171,19 @@ public class Transaction {
 
     static public void report() {
         MemoryMXBean bean = ManagementFactory.getMemoryMXBean();
-        
-        System.out.println("\n\nDasein Connection Report (" + new Date() + "):");
-        System.out.println("\tOpen connections: " + connections);
-        System.out.println("\tHigh connections: " + highPoint);
-        System.out.println("\tTransaction cache size: " + transactions.size());
-        System.out.println("\tEvent cache size: " + eventCache.size());
-        System.out.println("\tHeap memory usage: " + bean.getHeapMemoryUsage());
-        System.out.println("\tNon-heap memory usage: " + bean.getNonHeapMemoryUsage());
-        System.out.println("\tFree memory: " + (Runtime.getRuntime().freeMemory()/1024000) + "MB");
-        System.out.println("\tTotal memory: " + (Runtime.getRuntime().totalMemory()/1024000) + "MB");
-        System.out.println("\tMax memory: " + (Runtime.getRuntime().maxMemory()/1024000) + "MB");
-        System.out.println("\n");
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Dasein Connection Report (" + new Date() + "):");
+        sb.append("Open connections: " + connections);
+        sb.append(", High connections: " + highPoint);
+        sb.append(", Transaction cache size: " + transactions.size());
+        sb.append(", Event cache size: " + eventCache.size());
+        sb.append(", Heap memory usage: " + bean.getHeapMemoryUsage());
+        sb.append(", Non-heap memory usage: " + bean.getNonHeapMemoryUsage());
+        sb.append(", Free memory: " + (Runtime.getRuntime().freeMemory() / 1024000L) + "MB");
+        sb.append(", Total memory: " + (Runtime.getRuntime().totalMemory() / 1024000L) + "MB");
+        sb.append(", Max memory: " + (Runtime.getRuntime().maxMemory() / 1024000L) + "MB");
+        logger.info(sb.toString());
     }
     
     /**
@@ -259,7 +260,7 @@ public class Transaction {
                         }
                     }
                     catch( Throwable t ) {
-                        t.printStackTrace();
+                        logger.error(t.getMessage(), t);
                     }
                 } while( !events.empty() );
             }
@@ -375,38 +376,42 @@ public class Transaction {
                 return res;
             }
             catch( SQLException e ) {
-                logger.warn("SQLException: " + e.getMessage());
+                String err = "SQLException: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.warn(err, e);
+                } else {
+                    logger.warn(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( InstantiationException e ) {
-                logger.error("Instantiation exception: " + e.getMessage());
+                String err = "Instantiation exception: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( IllegalAccessException e ) {
-                logger.error("IllegalAccessException: " + e.getMessage());
+                String err = "IllegalAccessException: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( RuntimeException e ) {
-                logger.error("RuntimeException: " + e.getMessage());
-                if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
-                }
-                e.printStackTrace();
+                logger.error("RuntimeException: " + e.getMessage(), e);
                 throw new PersistenceException(e);
             }
             catch( Error e ) {
-                logger.error("Error: " + e.getMessage());
+                String err = "Error: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(new RuntimeException(e));
             }
@@ -452,24 +457,24 @@ public class Transaction {
                 return res;
             }
             catch( SQLException e ) {
-                logger.warn("SQLException: " + e.getMessage());
+                String err = "SQLException: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.warn(err, e);
+                } else {
+                    logger.warn(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( RuntimeException e ) {
-                logger.error("RuntimeException: " + e.getMessage());
-                if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
-                }
-                e.printStackTrace();
+                logger.error("RuntimeException: " + e.getMessage(), e);
                 throw new PersistenceException(e);
             }
             catch( Error e ) {
-                logger.error("Error: " + e.getMessage());
+                String err = "Error: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(new RuntimeException(e));
             }
@@ -592,7 +597,7 @@ public class Transaction {
                 state = "CONNECTED";
             }
             catch( NamingException e ) {
-                e.printStackTrace();
+                logger.error("Problem with datasource: " + e.getMessage());
                 throw new PersistenceException(e.getMessage());
             }
             conn.setAutoCommit(false);
@@ -618,7 +623,7 @@ public class Transaction {
         }
     }
     
-    private void printElement(StackTraceElement element) {
+    private String elementToString(StackTraceElement element) {
         int no = element.getLineNumber();
         String ln;
         
@@ -637,17 +642,19 @@ public class Transaction {
         else {
             ln = " " + no;
         }
-        System.out.println("\t" + ln + " " + element.getFileName() + ": " + element.getClassName() + "." + element.getMethodName());
+        return ln + " " + element.getFileName() + ": " + element.getClassName() + "." + element.getMethodName();
     }
     
-    private void printStackTrace() {
+    private void logStackTrace() {
         if( stackTrace == null ) {
-            System.out.println("\t--> No stack trace <--");
+            logger.error("--> No stack trace, ID " + transactionId +" <--");
         }
         else {
+            StringBuilder sb = new StringBuilder("Stack trace for ").append(transactionId).append(":\n");
             for( StackTraceElement element : stackTrace ) {
-                printElement(element);
+                sb.append(elementToString(element)).append('\n');
             }
+            logger.error(sb.toString());
         }
     }
     /**
@@ -663,9 +670,9 @@ public class Transaction {
             state = "ROLLING BACK";
             logger.debug("Rolling back JDBC connection: " + transactionId);
             try { connection.rollback(); }
-            catch( SQLException e ) { e.printStackTrace(); }
+            catch( SQLException e ) { logger.error("", e); }
             try { connection.close(); }
-            catch( SQLException e ) { e.printStackTrace(); }
+            catch( SQLException e ) { logger.error("", e); }
             connection = null;
             if( logger.isInfoEnabled() ) {
                 logger.info("Reducing the number of connections from " + connections + " due to rollback.");

@@ -121,7 +121,7 @@ public final class RelationalHSCache<T extends CachedItem> extends PersistentCac
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem reading " + DaseinSequencer.PROPERTIES + ": " + e.getMessage(), e);
         }
         database = props.getProperty("dasein.persist.handlersocket.database");
         handlerSocketHost = props.getProperty("dasein.persist.handlersocket.host");
@@ -413,7 +413,7 @@ public final class RelationalHSCache<T extends CachedItem> extends PersistentCac
                             list = RelationalHSCache.this.load(getLoader(terms, null), null, toParams(terms));
                         }
                         catch( Throwable forgetIt ) {
-                            e.printStackTrace();
+                            logger.error(forgetIt.getMessage(), forgetIt);
                             throw new RuntimeException(e);
                         }
                     }
@@ -437,7 +437,7 @@ public final class RelationalHSCache<T extends CachedItem> extends PersistentCac
                     throw (PersistenceException)t;
                 }
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(e.getMessage(), e);
                 }
                 throw new PersistenceException(e);
             }
