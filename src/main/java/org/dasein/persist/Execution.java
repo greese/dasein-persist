@@ -78,8 +78,8 @@ public abstract class Execution {
             Properties props = new Properties();
             Enumeration propenum;
 
-            System.out.println("Looking up: " + PROPERTIES);
-            System.out.println("Location:   " + Sequencer.class.getResource(PROPERTIES));
+            logger.info("Looking up: " + PROPERTIES);
+            logger.info("Location:   " + Sequencer.class.getResource(PROPERTIES));
             if( is != null ) {
                 props.load(is);
             }
@@ -88,6 +88,7 @@ public abstract class Execution {
                 String path = System.getenv(DASEIN_PERSIST_PROPERTIES);
                 if (path != null && !path.isEmpty()) {
                     is = new FileInputStream(path);
+                    // todo: 'is' is ignored
                 }
             }
             propenum = props.propertyNames();
@@ -103,7 +104,7 @@ public abstract class Execution {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem reading " + PROPERTIES + ": " + e.getMessage(), e);
         }
         Thread stackPusher = new Thread() {
             public void run() {
@@ -224,7 +225,7 @@ public abstract class Execution {
                 }
             }
             catch( Throwable t ) {
-                t.printStackTrace();
+                logger.error("Problem pushing executions: " + t.getMessage(), t);
             }
             finally {
                 tmp.clear();                
@@ -375,8 +376,7 @@ public abstract class Execution {
                 }
             }
             catch( SQLException e ) {
-                logger.debug("Error executing event: " + e.getMessage());
-                e.printStackTrace();
+                logger.debug("Error executing event: " + e.getMessage(), e);
                 throw new PersistenceException(e.getMessage());
             }
         }

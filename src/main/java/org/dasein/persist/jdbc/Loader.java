@@ -309,15 +309,15 @@ public class Loader extends AutomatedSql {
                     }
                 }
                 catch( Exception more ) {
-                    logger.error("I have no idea how to map to " + type.getName() + " / " + pt + ": " + e.getMessage());
-                    e.printStackTrace();
-                    throw new SQLException("I have no idea how to map to " + type.getName() + " / " + pt + ": " + e.getMessage());
+                    String err = "I have no idea how to map to " + type.getName() + " / " + pt + ": " + e.getMessage();
+                    logger.error(err, e);
+                    throw new SQLException(err);
                 }
             }
             catch( Exception e ) {
-                logger.error("Unable to load data for type " + type + " - " + pt + ": " + e.getMessage());
-                e.printStackTrace();
-                throw new SQLException("Unable to load data for type " + type + " - " + pt + ": " + e.getMessage());
+                String err = "Unable to load data for type " + type + " - " + pt + ": " + e.getMessage();
+                logger.error(err, e);
+                throw new SQLException(err);
             }
         }
         else if( Number.class.isAssignableFrom(type) || type.equals(long.class) || type.equals(int.class) || type.equals(short.class) || type.equals(float.class) || type.equals(double.class) ) {

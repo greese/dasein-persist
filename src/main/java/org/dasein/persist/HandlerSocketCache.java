@@ -91,7 +91,7 @@ public class HandlerSocketCache<T extends CachedItem> extends PersistentCache<T>
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem rading " + DaseinSequencer.PROPERTIES + ": " + e.getMessage(), e);
         }
         database = props.getProperty("dasein.persist.handlersocket.database");
         handlerSocketHost = props.getProperty("dasein.persist.handlersocket.host");
