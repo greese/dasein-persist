@@ -3,7 +3,7 @@
 
   <groupId>org.dasein</groupId>
   <artifactId>dasein-persist</artifactId>
-  <version>2012.08.10-SNAPSHOT</version>
+  <version>2013.01-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>dasein-persist</name>
