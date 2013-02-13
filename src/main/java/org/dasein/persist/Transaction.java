@@ -25,12 +25,16 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.EmptyStackException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 // J2EE imports
 import javax.naming.InitialContext;
@@ -52,31 +56,31 @@ import org.apache.log4j.Logger;
  * @author George Reese
  */
 public class Transaction {
-    static private Logger logger            = Logger.getLogger(Transaction.class);
+    static private final Logger logger = Logger.getLogger(Transaction.class);
 
     /**
      * A count of open connections.
      */
-    static private int connections = 0;
+    static private final AtomicInteger connections = new AtomicInteger(0);
     /**
      * The most transactions ever open at a single time.
      */
-    static private int highPoint   = 0;
-    /**
-     * The maid service cleans up dead transactions.
-     */
-    static private Thread maid      = null;
+    static private final AtomicInteger highPoint = new AtomicInteger(0);
     /**
      * The next transaction ID to use.
      */
-    static private int nextTransaction = 1;
+    static private final AtomicInteger nextTransactionId = new AtomicInteger(0);
     /**
      * A list of open transactions.
      */
-    static private Map<Number,Transaction> transactions = new HashMap<Number,Transaction>();
-    
-    static private Map<String,Stack<Execution>> eventCache = new HashMap<String,Stack<Execution>>();
-    
+    static private final Map<Number,Transaction> transactions = new ConcurrentHashMap<Number, Transaction>(8, 0.9f, 1);
+    /**
+     * Cache of Execution objects to minimize dynamically created SQL
+     */
+    static private final Map<String,Stack<Execution>> eventCache = new ConcurrentHashMap<String, Stack<Execution>>(8, 0.9f, 1);
+
+    static private final AtomicBoolean maidLaunched = new AtomicBoolean(false);
+
     /**
      * Cleans up transactions that somehow never got cleaned up.
      */
@@ -86,7 +90,7 @@ public class Transaction {
             int count;
             
             if( logger.isInfoEnabled() ) {
-                logger.info("There are " + connections + " open connections right now (high point: " + highPoint + ").");
+                logger.info("There are " + connections.get() + " open connections right now (high point: " + highPoint.get() + ").");
             }
             try { Thread.sleep(1000L); }
             catch( InterruptedException ignore ) { /* ignore me */ }
@@ -98,30 +102,29 @@ public class Transaction {
                 logger.info("Running the maid service on " + count + " transactions.");
             }
             closing = new ArrayList<Transaction>();
-            synchronized( transactions ) {
-                long now = System.currentTimeMillis();
+            long now = System.currentTimeMillis();
 
-                for( Transaction xaction : transactions.values() ) {
-                    long diff = (now - xaction.openTime)/1000L;
-                    
-                    if( diff > 10 ) {
-                        Thread t = xaction.executionThread;
-                        
-                        logger.warn("Open transaction " + xaction.transactionId + " has been open for " + diff + " seconds.");
-                        logger.warn("Transaction " + xaction.transactionId + " state: " + xaction.state);
-                        if( t== null ) {
-                            logger.warn("Thread: no execution thread active");
-                        }
-                        else {
-                            logger.warn("Thread " + t.getName() + " (" + t.getState() + "):");
-                            for( StackTraceElement elem : t.getStackTrace() ) {
-                                logger.warn("\t" + elem.toString());
-                            }
+            // ConcurrentHashMap provides a weakly-consistent view for this iterator
+            for( Transaction xaction : transactions.values() ) {
+                long diff = (now - xaction.openTime)/1000L;
+
+                if( diff > 10 ) {
+                    Thread t = xaction.executionThread;
+
+                    logger.warn("Open transaction " + xaction.transactionId + " has been open for " + diff + " seconds.");
+                    logger.warn("Transaction " + xaction.transactionId + " state: " + xaction.state);
+                    if( t== null ) {
+                        logger.warn("Thread: no execution thread active");
+                    }
+                    else {
+                        logger.warn("Thread " + t.getName() + " (" + t.getState() + "):");
+                        for( StackTraceElement elem : t.getStackTrace() ) {
+                            logger.warn("\t" + elem.toString());
                         }
                     }
-                    if( diff  > 600 ) {
-                        closing.add(xaction);
-                    }
+                }
+                if( diff  > 600 ) {
+                    closing.add(xaction);
                 }
             }
             for( Transaction xaction: closing ) {
@@ -131,7 +134,7 @@ public class Transaction {
             }
         }
     }
-    
+
     /**
      * Provides a new transaction instance to manage your transaction
      * context.
@@ -143,35 +146,27 @@ public class Transaction {
     
     static public Transaction getInstance(boolean readOnly) {        
         Transaction xaction;
-        int xid;
-
-        if( nextTransaction == Integer.MAX_VALUE ) {
-            nextTransaction = 0;
+        final int xid = nextTransactionId.incrementAndGet();
+        if( xid == Integer.MAX_VALUE ) {
+            nextTransactionId.set(0);
         }
-        xid = nextTransaction++;
         xaction = new Transaction(xid, readOnly);
-        if( maid == null ) {
-            synchronized( transactions ) { 
-                // this bizarreness avoids synchronizing for most cases
-                if( maid == null ) {
-                    maid = new Thread() {
-                        public void run() {
-                            clean();
-                        }   
-                    };  
-                    maid.setDaemon(true);
-                    maid.setPriority(Thread.MIN_PRIORITY + 1);
-                    maid.setName("Transaction Maid");
-                    maid.start();
+        if (maidLaunched.compareAndSet(false, true)) {
+            final Thread maid = new Thread() {
+                public void run() {
+                    clean();
                 }
-            }
+            };
+            maid.setName("Transaction Maid");
+            maid.setDaemon(true);
+            maid.setPriority(Thread.MIN_PRIORITY + 1);
+            maid.start();
         }
         return xaction;
     }
 
     static public void report() {
         MemoryMXBean bean = ManagementFactory.getMemoryMXBean();
-
         StringBuilder sb = new StringBuilder();
         sb.append("Dasein Connection Report (" + new Date() + "):");
         sb.append("Open connections: " + connections);
@@ -189,19 +184,19 @@ public class Transaction {
     /**
      * A connection object for this transaction.
      */
-    private Connection connection = null;
+    private volatile Connection connection = null;
     /**
      * Marks the transaction as dirty and no longer able to be used.
      */
-    private boolean    dirty      = false;
+    private volatile boolean dirty = false;
     
-    private Thread executionThread = null;
+    private volatile Thread executionThread = null;
     /**
      * A stack of events that are part of this transaction.
      */
-    private Stack<Execution> events     = new Stack<Execution>();
+    private final Stack<Execution> events = new Stack<Execution>();
     
-    private Stack<String> statements = new Stack<String>();
+    private final Stack<String> statements = new Stack<String>();
     /**
      * Marks the time the transaction was opened so it can be closed.
      */
@@ -271,9 +266,7 @@ public class Transaction {
             if( logger.isDebugEnabled() ) {
                 logger.debug("Removing transaction: " + transactionId);
             }
-            synchronized( transactions ) {
-                transactions.remove(new Integer(transactionId));
-            }
+            transactions.remove(new Integer(transactionId));
             logger.debug("exit - close()");
             events.clear();
             statements.clear();
@@ -308,10 +301,10 @@ public class Transaction {
                 state = "CLOSING CONNECTIONS";
                 connection.close();
                 connection = null;
+                final int numConnections = connections.decrementAndGet();
                 if( logger.isInfoEnabled() ) {
-                    logger.info("Reducing the number of connections from " + connections + " due to commit.");
+                    logger.info("Reduced the number of connections from " + (numConnections+1) + " due to commit.");
                 }
-                connections--;
                 if( logger.isDebugEnabled() ) {
                     logger.debug("Releasing: " + transactionId);
                 }
@@ -603,19 +596,19 @@ public class Transaction {
             conn.setAutoCommit(false);
             conn.setReadOnly(readOnly);
             connection = conn;
+            final int numConnections = connections.incrementAndGet();
+            final int numHighPoint = highPoint.get();
             if( logger.isInfoEnabled() ) {
-                logger.info("Incrementing connection count from " + connections);
+                logger.info("Incremented connection count to " + numConnections);
             }
-            connections++;
-            if( connections > highPoint ) {
-                highPoint = connections;
-                if( logger.isInfoEnabled() ) {
-                    logger.info("A NEW CONNECTION HIGH POINT HAS BEEN REACHED: " + highPoint);
+            if( numConnections > numHighPoint) {
+                if (highPoint.compareAndSet(numHighPoint, numConnections)) {
+                    if( logger.isInfoEnabled() ) {
+                        logger.info("A NEW CONNECTION HIGH POINT HAS BEEN REACHED: " + highPoint);
+                    }
                 }
             }
-            synchronized( transactions ) {
-                transactions.put(new Integer(transactionId), this);
-            }
+            transactions.put(new Integer(transactionId), this);
             logger.debug("return - open(Execution)");
         }
         finally {
@@ -662,22 +655,59 @@ public class Transaction {
      * transaction should no longer be referenced after this point.
      */
     public void rollback() {
+        rollback(false);
+    }
+
+    protected void rollback(boolean cancelStatements) {
+
         logger.debug("enter - rollback()");
         try {
             if( connection == null ) {
                 return;
             }
+            if (cancelStatements) {
+                int numCancelled = 0;
+                for (Execution event : events) {
+                    final Statement stmt = event.statement;
+                    if (stmt != null) {
+                        try {
+                            if (!stmt.isClosed()) {
+                                stmt.cancel();
+                                numCancelled += 1;
+                            }
+                        } catch (Throwable t) {
+                            logger.error("Problem cancelling statement: " + t.getMessage());
+                        }
+                    }
+                }
+                if (numCancelled > 0) {
+                    if (numCancelled == 1) {
+                        logger.warn("Cancelled 1 query");
+                    } else {
+                        logger.warn("Cancelled " + numCancelled + " queries");
+                    }
+                }
+            }
             state = "ROLLING BACK";
             logger.debug("Rolling back JDBC connection: " + transactionId);
-            try { connection.rollback(); }
-            catch( SQLException e ) { logger.error("", e); }
-            try { connection.close(); }
-            catch( SQLException e ) { logger.error("", e); }
-            connection = null;
-            if( logger.isInfoEnabled() ) {
-                logger.info("Reducing the number of connections from " + connections + " due to rollback.");
+            try {
+                connection.rollback();
             }
-            connections--;
+            catch( SQLException e ) {
+                logger.error("Problem with rollback: " + e.getMessage(), e);
+            }
+            try {
+                connection.close();
+            }
+            catch( SQLException e )
+            {
+                logger.error("Problem closing connection: " + e.getMessage(), e);
+            }
+            connection = null;
+            final int numConnections = connections.decrementAndGet();
+            if( logger.isInfoEnabled() ) {
+                logger.info("Reducing the number of connections from " + (numConnections+1) + " due to rollback.");
+            }
             close();
             dirty = true;
             logger.debug("return - rollback()");
