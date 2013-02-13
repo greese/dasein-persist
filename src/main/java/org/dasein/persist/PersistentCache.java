@@ -171,7 +171,7 @@ public abstract class PersistentCache<T extends CachedItem> {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem reading " + DaseinSequencer.PROPERTIES + ": " + e.getMessage(), e);
         }
         
         TreeSet<Key> keys = new TreeSet<Key>();
@@ -261,9 +261,9 @@ public abstract class PersistentCache<T extends CachedItem> {
                 cache.initBase(forClass, alternateEntytName, schemaVersion, mappers, new Key(primaryKey), keys.toArray(new Key[keys.size()]));
             }
             catch( Throwable t ) {
-                logger.error("Unable to load persistence cache " + prop + ": " + t.getMessage());
-                t.printStackTrace();
-                throw new PersistenceException("Unable to load persistence cache " + prop + ": " + t.getMessage());
+                String err = "Unable to load persistence cache " + prop + ": " + t.getMessage();
+                logger.error(err, t);
+                throw new PersistenceException(err);
             }
         }
         synchronized( caches ) {
@@ -343,7 +343,7 @@ public abstract class PersistentCache<T extends CachedItem> {
                                 lookups.put(field.getName(), delegate.newInstance());
                             }
                             catch( Throwable t ) {
-                                t.printStackTrace();
+                                logger.error(t.getMessage(), t);
                             }
                         }
                     }
@@ -440,7 +440,7 @@ public abstract class PersistentCache<T extends CachedItem> {
             return value;
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e);
         }
     }
@@ -469,7 +469,7 @@ public abstract class PersistentCache<T extends CachedItem> {
             return value;
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e);
         }
     }
@@ -897,7 +897,7 @@ public abstract class PersistentCache<T extends CachedItem> {
                     }
                 }
                 else if( dataStoreValue != null ) {
-                    System.err.println("Type of dataStoreValue=" + dataStoreValue.getClass());
+                    logger.error("Type of dataStoreValue=" + dataStoreValue.getClass());
                     throw new PersistenceException("Unable to map " + fieldName + " as " + toType + " using " + dataStoreValue);                        
                 }
             }
@@ -1080,8 +1080,9 @@ public abstract class PersistentCache<T extends CachedItem> {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
-            throw new PersistenceException("Error mapping field in " + toType + " for " + fieldName + ": " + e.getMessage());
+            String err = "Error mapping field in " + toType + " for " + fieldName + ": " + e.getMessage();
+            logger.error(err, e);
+            throw new PersistenceException();
         }
         return dataStoreValue;
     }
@@ -1356,11 +1357,11 @@ public abstract class PersistentCache<T extends CachedItem> {
             throw new PersistenceException(e);
         }
         catch( RuntimeException e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e);
         }
         catch( Error e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e.getMessage());
         }
     }
@@ -1413,11 +1414,11 @@ public abstract class PersistentCache<T extends CachedItem> {
             throw new PersistenceException(e);
         }
         catch( RuntimeException e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e);
         }
         catch( Error e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e.getMessage());
         }
     }
@@ -1458,11 +1459,11 @@ public abstract class PersistentCache<T extends CachedItem> {
             throw new PersistenceException(e);
         }
         catch( RuntimeException e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e);
         }
         catch( Error e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
             throw new PersistenceException(e.getMessage());
         }
     }

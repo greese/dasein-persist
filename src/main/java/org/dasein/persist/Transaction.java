@@ -21,16 +21,21 @@
 package org.dasein.persist;
 
 // J2SE imports
+import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.sql.Statement;
 import java.util.Date;
 import java.util.EmptyStackException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Stack;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 // J2EE imports
 import javax.naming.InitialContext;
@@ -39,6 +44,7 @@ import javax.sql.DataSource;
 
 // Apache imports
 import org.apache.log4j.Logger;
+import org.dasein.util.DaseinUtilTasks;
 
 /**
  * Represents a database transaction to applications managing their
@@ -52,86 +58,94 @@ import org.apache.log4j.Logger;
  * @author George Reese
  */
 public class Transaction {
-    static private Logger logger            = Logger.getLogger(Transaction.class);
+    static private final Logger logger = Logger.getLogger(Transaction.class);
 
     /**
      * A count of open connections.
      */
-    static private int connections = 0;
+    static private final AtomicInteger connections = new AtomicInteger(0);
     /**
      * The most transactions ever open at a single time.
      */
-    static private int highPoint   = 0;
-    /**
-     * The maid service cleans up dead transactions.
-     */
-    static private Thread maid      = null;
+    static private final AtomicInteger highPoint = new AtomicInteger(0);
     /**
      * The next transaction ID to use.
      */
-    static private int nextTransaction = 1;
+    static private final AtomicInteger nextTransactionId = new AtomicInteger(0);
     /**
      * A list of open transactions.
      */
-    static private Map<Number,Transaction> transactions = new HashMap<Number,Transaction>();
-    
-    static private Map<String,Stack<Execution>> eventCache = new HashMap<String,Stack<Execution>>();
-    
+    static private final Map<Number,Transaction> transactions = new ConcurrentHashMap<Number, Transaction>(8, 0.9f, 1);
     /**
-     * Cleans up transactions that somehow never got cleaned up.
+     * Cache of Execution objects to minimize dynamically created SQL
      */
-    static private void clean() {
-        while( true ) {
-            ArrayList<Transaction> closing;
-            int count;
-            
-            if( logger.isInfoEnabled() ) {
-                logger.info("There are " + connections + " open connections right now (high point: " + highPoint + ").");
-            }
-            try { Thread.sleep(1000L); }
-            catch( InterruptedException ignore ) { /* ignore me */ }
-            count = transactions.size();
-            if( count < 1 ) {
-                continue;
-            }
-            if( logger.isInfoEnabled() ) {
-                logger.info("Running the maid service on " + count + " transactions.");
-            }
-            closing = new ArrayList<Transaction>();
-            synchronized( transactions ) {
-                long now = System.currentTimeMillis();
+    static private final Map<String,Stack<Execution>> eventCache = new ConcurrentHashMap<String, Stack<Execution>>(8, 0.9f, 1);
 
-                for( Transaction xaction : transactions.values() ) {
-                    long diff = (now - xaction.openTime)/1000L;
-                    
-                    if( diff > 10 ) {
-                        Thread t = xaction.executionThread;
-                        
-                        logger.warn("Open transaction " + xaction.transactionId + " has been open for " + diff + " seconds.");
-                        logger.warn("Transaction " + xaction.transactionId + " state: " + xaction.state);
-                        if( t== null ) {
-                            logger.warn("Thread: no execution thread active");
-                        }
-                        else {
-                            logger.warn("Thread " + t.getName() + " (" + t.getState() + "):");
-                            for( StackTraceElement elem : t.getStackTrace() ) {
-                                logger.warn("\t" + elem.toString());
-                            }
-                        }
-                    }
-                    if( diff  > 600 ) {
-                        closing.add(xaction);
-                    }
+    static private final AtomicBoolean maidLaunched = new AtomicBoolean(false);
+
+    static private final Properties properties = new Properties();
+
+    static public final String MAID_DISABLED = "dasein.persist.maid.disabled";
+    static public final String MAID_FREQUENCY = "dasein.persist.maid.frequency";
+    static public final String MAID_MAXSECONDS = "dasein.persist.maid.maxseconds";
+    static public final String MAID_WARNSECONDS = "dasein.persist.maid.warnseconds";
+
+    static private final boolean tracking;
+    static {
+        loadProperties();
+        tracking = !isMaidDisabled();
+    }
+
+    /**
+     * Clean up transactions.
+     */
+    private static class TransactionMaid implements Runnable {
+        @Override
+        public void run() {
+            int cycleCount = 0;
+            long warn = getMaidWarnMs();
+            long max = getMaidMaxMs();
+            long freq = getMaidFrequencyMs();
+            while (true) {
+                if (cycleCount % 21 == 20) {
+                    warn = getMaidWarnMs();
+                    max = getMaidMaxMs();
+                    freq = getMaidFrequencyMs();
+                }
+                try {
+                    Thread.sleep(freq);
+                    _clean(warn, max);
+                } catch (Throwable t) {
+                    logger.error("Problem running transaction maid: " + t.getMessage(), t);
+                } finally {
+                    cycleCount += 1;
                 }
             }
-            for( Transaction xaction: closing ) {
-                logger.warn("Encountered a stale transaction (" + xaction.transactionId + "), forcing a close: " + xaction.state);
-                xaction.printStackTrace();
-                xaction.close();
+        }
+
+        private static void _clean(long warnMs, long maxMs) {
+            if (transactions.isEmpty()) {
+                return;
+            }
+            final long now = System.currentTimeMillis();
+            // ConcurrentHashMap provides a weakly-consistent view for this iterator
+            for (Transaction xaction : transactions.values()) {
+                final long diff = now - xaction.openTime;
+                if (diff > maxMs) {
+                    logger.error("Transaction " + xaction.transactionId + " has been open for " + diff/1000L + " seconds, forcing a close: " + xaction.state);
+                    try {
+                        xaction.rollback(true);
+                        xaction.close();
+                    } catch (Throwable t) {
+                        logger.error("Problem rolling back offending transaction " + xaction.transactionId + ": " + t.getMessage());
+                    }
+                } else if (diff > warnMs) {
+                    logger.warn("Transaction " + xaction.transactionId + " has been open for " + diff/1000L + " seconds.");
+                }
             }
         }
     }
-    
+
     /**
      * Provides a new transaction instance to manage your transaction
      * context.
@@ -142,28 +156,15 @@ public class Transaction {
     }
     
     static public Transaction getInstance(boolean readOnly) {        
-        Transaction xaction;
-        int xid;
-
-        if( nextTransaction == Integer.MAX_VALUE ) {
-            nextTransaction = 0;
+        final int xid = nextTransactionId.incrementAndGet();
+        if( xid == Integer.MAX_VALUE ) { // contention here will cause a few screwy values
+            nextTransactionId.set(0);
         }
-        xid = nextTransaction++;
-        xaction = new Transaction(xid, readOnly);
-        if( maid == null ) {
-            synchronized( transactions ) { 
-                // this bizarreness avoids synchronizing for most cases
-                if( maid == null ) {
-                    maid = new Thread() {
-                        public void run() {
-                            clean();
-                        }   
-                    };  
-                    maid.setDaemon(true);
-                    maid.setPriority(Thread.MIN_PRIORITY + 1);
-                    maid.setName("Transaction Maid");
-                    maid.start();
-                }
+        Transaction xaction = new Transaction(xid, readOnly);
+        if (maidLaunched.compareAndSet(false, true)) {
+            loadProperties();
+            if (!isMaidDisabled()) {
+                DaseinUtilTasks.submit(new TransactionMaid());
             }
         }
         return xaction;
@@ -171,36 +172,36 @@ public class Transaction {
 
     static public void report() {
         MemoryMXBean bean = ManagementFactory.getMemoryMXBean();
-        
-        System.out.println("\n\nDasein Connection Report (" + new Date() + "):");
-        System.out.println("\tOpen connections: " + connections);
-        System.out.println("\tHigh connections: " + highPoint);
-        System.out.println("\tTransaction cache size: " + transactions.size());
-        System.out.println("\tEvent cache size: " + eventCache.size());
-        System.out.println("\tHeap memory usage: " + bean.getHeapMemoryUsage());
-        System.out.println("\tNon-heap memory usage: " + bean.getNonHeapMemoryUsage());
-        System.out.println("\tFree memory: " + (Runtime.getRuntime().freeMemory()/1024000) + "MB");
-        System.out.println("\tTotal memory: " + (Runtime.getRuntime().totalMemory()/1024000) + "MB");
-        System.out.println("\tMax memory: " + (Runtime.getRuntime().maxMemory()/1024000) + "MB");
-        System.out.println("\n");
+        StringBuilder sb = new StringBuilder();
+        sb.append("Dasein Connection Report (" + new Date() + "): ");
+        if (tracking) {
+            sb.append("Open connections: " + connections.get() + ", ");
+            sb.append("Transaction cache size: " + transactions.size() + ", ");
+        }
+        sb.append("Event cache size: " + eventCache.size());
+        sb.append(", Heap memory usage: " + bean.getHeapMemoryUsage());
+        sb.append(", Non-heap memory usage: " + bean.getNonHeapMemoryUsage());
+        sb.append(", Free memory: " + (Runtime.getRuntime().freeMemory() / 1024000L) + "MB");
+        sb.append(", Total memory: " + (Runtime.getRuntime().totalMemory() / 1024000L) + "MB");
+        sb.append(", Max memory: " + (Runtime.getRuntime().maxMemory() / 1024000L) + "MB");
+        logger.info(sb.toString());
     }
     
     /**
      * A connection object for this transaction.
      */
-    private Connection connection = null;
+    private volatile Connection connection = null;
     /**
      * Marks the transaction as dirty and no longer able to be used.
      */
-    private boolean    dirty      = false;
+    private volatile boolean dirty = false;
     
-    private Thread executionThread = null;
     /**
      * A stack of events that are part of this transaction.
      */
-    private Stack<Execution> events     = new Stack<Execution>();
+    private final Stack<Execution> events = new Stack<Execution>();
     
-    private Stack<String> statements = new Stack<String>();
+    private final Stack<String> statements = new Stack<String>();
     /**
      * Marks the time the transaction was opened so it can be closed.
      */
@@ -219,7 +220,7 @@ public class Transaction {
     private int        transactionId;
 
     private StackTraceElement[] stackTrace;
-    
+
     /**
      * Constructs a transaction object having the specified transaction ID.
      * @param xid the transaction ID that identifies the transaction
@@ -236,14 +237,12 @@ public class Transaction {
      * it is rolled back.
      */
     public void close() {
-        logger.debug("enter - close()");
         try {
             state = "CLOSING";
             if( connection != null ) {
                 logger.warn("Connection not committed, rolling back.");
                 rollback();
             }
-            logger.debug("Closing all open events.");
             if( !events.empty() ) {
                 state = "CLOSING EVENTS";
                 do {
@@ -259,21 +258,16 @@ public class Transaction {
                         }
                     }
                     catch( Throwable t ) {
-                        t.printStackTrace();
+                        logger.error(t.getMessage(), t);
                     }
                 } while( !events.empty() );
             }
             state = "CLOSED";
-            logger.debug("return - close()");
         }
         finally {
-            if( logger.isDebugEnabled() ) {
-                logger.debug("Removing transaction: " + transactionId);
-            }
-            synchronized( transactions ) {
+            if (tracking) {
                 transactions.remove(new Integer(transactionId));
             }
-            logger.debug("exit - close()");
             events.clear();
             statements.clear();
             stackTrace = null;
@@ -289,33 +283,26 @@ public class Transaction {
      * during the commit
      */
     public void commit() throws PersistenceException {
-        logger.debug("enter - commit()");
         try {
             if( connection == null ) {
                 if( dirty ) {
                     throw new PersistenceException("Attempt to commit a committed or aborted transaction.");
                 }       
-                logger.debug("return as no-op - commit()");
                 return;
             }
             state = "COMMITTING";
             try {
-                if( logger.isDebugEnabled() ) {
-                    logger.debug("Committing: " + transactionId);
-                }
                 connection.commit();
                 state = "CLOSING CONNECTIONS";
                 connection.close();
                 connection = null;
-                if( logger.isInfoEnabled() ) {
-                    logger.info("Reducing the number of connections from " + connections + " due to commit.");
+                if (logger.isDebugEnabled()) {
+                    logger.debug(connectionCloseLog());
                 }
-                connections--;
-                if( logger.isDebugEnabled() ) {
-                    logger.debug("Releasing: " + transactionId);
+                if (tracking) {
+                    connections.decrementAndGet();
                 }
                 close();
-                logger.debug("return - commit()");
             }
             catch( SQLException e ) {
                 throw new PersistenceException(e.getMessage());
@@ -329,7 +316,6 @@ public class Transaction {
             }
         }
         finally {
-            logger.debug("exit - commit()");
         }
     }
 
@@ -338,21 +324,16 @@ public class Transaction {
     }
     
     public Map<String,Object> execute(Class<? extends Execution> cls, Map<String,Object> args, String dsn) throws PersistenceException {
-        logger.debug("enter - execute(Class,Map)");
         try {
             StringBuilder holder = new StringBuilder();
             boolean success = false;
             
-            executionThread = Thread.currentThread();
             state = "PREPARING";
             try {
                 Execution event = getEvent(cls);
                 Map<String,Object> res;
                 
                 if( connection == null ) {
-                    if( logger.isDebugEnabled() ) {
-                        logger.debug("New connection: " + transactionId);
-                    }
                     open(event, dsn);
                 }
                 /*
@@ -370,43 +351,46 @@ public class Transaction {
                 events.push(event);
                 statements.push(holder.toString());
                 success = true;
-                logger.debug("return - execute(Execution, Map)");
                 state = "AWAITING COMMIT: " + holder.toString();
                 return res;
             }
             catch( SQLException e ) {
-                logger.warn("SQLException: " + e.getMessage());
+                String err = "SQLException: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.warn(err, e);
+                } else {
+                    logger.warn(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( InstantiationException e ) {
-                logger.error("Instantiation exception: " + e.getMessage());
+                String err = "Instantiation exception: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( IllegalAccessException e ) {
-                logger.error("IllegalAccessException: " + e.getMessage());
+                String err = "IllegalAccessException: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( RuntimeException e ) {
-                logger.error("RuntimeException: " + e.getMessage());
-                if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
-                }
-                e.printStackTrace();
+                logger.error("RuntimeException: " + e.getMessage(), e);
                 throw new PersistenceException(e);
             }
             catch( Error e ) {
-                logger.error("Error: " + e.getMessage());
+                String err = "Error: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(new RuntimeException(e));
             }
@@ -415,29 +399,22 @@ public class Transaction {
                     logger.warn("FAILED TRANSACTION (" + transactionId + "): " + holder.toString());
                     rollback();
                 }
-                executionThread = null;
             }
         }
         finally {
-            logger.debug("exit - execute(Class,Map)");
         }
     }
     
     public Map<String,Object> execute(Execution event, Map<String,Object> args, String dsn) throws PersistenceException {
-        logger.debug("enter - execute(Class,Map)");
         try {
             StringBuilder holder = new StringBuilder();
             boolean success = false;
             
-            executionThread = Thread.currentThread();
             state = "PREPARING";
             try {
                 Map<String,Object> res;
                 
                 if( connection == null ) {
-                    if( logger.isDebugEnabled() ) {
-                        logger.debug("New connection: " + transactionId);
-                    }
                     open(event, dsn);
                 }
                 //stateargs = event.loadStatement(connection, args);
@@ -448,28 +425,27 @@ public class Transaction {
                 statements.push(holder.toString());
                 success = true;
                 state = "AWAITING COMMIT: " + holder.toString();
-                logger.debug("return - execute(Execution, Map)");
                 return res;
             }
             catch( SQLException e ) {
-                logger.warn("SQLException: " + e.getMessage());
+                String err = "SQLException: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.warn(err, e);
+                } else {
+                    logger.warn(err);
                 }
                 throw new PersistenceException(e);
             }
             catch( RuntimeException e ) {
-                logger.error("RuntimeException: " + e.getMessage());
-                if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
-                }
-                e.printStackTrace();
+                logger.error("RuntimeException: " + e.getMessage(), e);
                 throw new PersistenceException(e);
             }
             catch( Error e ) {
-                logger.error("Error: " + e.getMessage());
+                String err = "Error: " + e.getMessage();
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(err, e);
+                } else {
+                    logger.error(err);
                 }
                 throw new PersistenceException(new RuntimeException(e));
             }
@@ -478,11 +454,9 @@ public class Transaction {
                     logger.warn("FAILED TRANSACTION (" + transactionId + "): " + holder.toString());
                     rollback();
                 }
-                executionThread = null;
             }
         }
         finally {
-            logger.debug("exit - execute(Class,Map)");
         }
     }
     
@@ -563,7 +537,6 @@ public class Transaction {
      * @throws PersistenceException
      */
     private synchronized void open(Execution event, String dsn) throws SQLException, PersistenceException {
-        logger.debug("enter - open(Execution)");
         try {
             Connection conn;
             
@@ -571,10 +544,6 @@ public class Transaction {
                 return;
             }
             state = "OPENING";
-            openTime = System.currentTimeMillis();
-            if( logger.isDebugEnabled() ) {
-                logger.debug("Opening " + transactionId);
-            }
             try {
                 InitialContext ctx = new InitialContext();
                 DataSource ds;
@@ -586,39 +555,42 @@ public class Transaction {
                 ds = (DataSource)ctx.lookup(dsn);
                 conn = ds.getConnection();
                 openTime = System.currentTimeMillis();
+                logger.warn("DPTRANSID-" + transactionId + " connection.get - dsn='" + dsn + '\'');
                 if( logger.isDebugEnabled() ) {
-                    logger.debug("Got connection for " + transactionId + ": " + conn);
-                }            
+                    logger.debug("DPTRANSID-" + transactionId + " connection.get - dsn='" + dsn + '\'');
+                }
                 state = "CONNECTED";
             }
             catch( NamingException e ) {
-                e.printStackTrace();
+                logger.error("Problem with datasource: " + e.getMessage());
                 throw new PersistenceException(e.getMessage());
             }
             conn.setAutoCommit(false);
             conn.setReadOnly(readOnly);
             connection = conn;
-            if( logger.isInfoEnabled() ) {
-                logger.info("Incrementing connection count from " + connections);
-            }
-            connections++;
-            if( connections > highPoint ) {
-                highPoint = connections;
-                if( logger.isInfoEnabled() ) {
-                    logger.info("A NEW CONNECTION HIGH POINT HAS BEEN REACHED: " + highPoint);
-                }
-            }
-            synchronized( transactions ) {
+            if (tracking) {
+                connections.incrementAndGet();
                 transactions.put(new Integer(transactionId), this);
             }
-            logger.debug("return - open(Execution)");
         }
         finally {
-            logger.debug("exit - open(Execution)");
         }
     }
-    
-    private void printElement(StackTraceElement element) {
+
+    private String connectionCloseLog() {
+        String log = "DPTRANSID-" + transactionId + " connection.close - duration=" + (System.currentTimeMillis() - openTime) + "ms - stmt='";
+        String stmt = statements.peek();
+        if (stmt != null) {
+            if (stmt.length() < 100) {
+                log = log + stmt.substring(0,stmt.length());
+            } else {
+                log = log + stmt.substring(0,100);
+            }
+        }
+        return log + '\'';
+    }
+
+    private String elementToString(StackTraceElement element) {
         int no = element.getLineNumber();
         String ln;
         
@@ -637,17 +609,19 @@ public class Transaction {
         else {
             ln = " " + no;
         }
-        System.out.println("\t" + ln + " " + element.getFileName() + ": " + element.getClassName() + "." + element.getMethodName());
+        return ln + " " + element.getFileName() + ": " + element.getClassName() + "." + element.getMethodName();
     }
     
-    private void printStackTrace() {
+    private void logStackTrace() {
         if( stackTrace == null ) {
-            System.out.println("\t--> No stack trace <--");
+            logger.error("--> No stack trace, ID " + transactionId +" <--");
         }
         else {
+            StringBuilder sb = new StringBuilder("Stack trace for ").append(transactionId).append(":\n");
             for( StackTraceElement element : stackTrace ) {
-                printElement(element);
+                sb.append(elementToString(element)).append('\n');
             }
+            logger.error(sb.toString());
         }
     }
     /**
@@ -655,28 +629,109 @@ public class Transaction {
      * transaction should no longer be referenced after this point.
      */
     public void rollback() {
-        logger.debug("enter - rollback()");
+        rollback(false);
+    }
+
+    protected void rollback(boolean cancelStatements) {
         try {
             if( connection == null ) {
                 return;
             }
-            state = "ROLLING BACK";
-            logger.debug("Rolling back JDBC connection: " + transactionId);
-            try { connection.rollback(); }
-            catch( SQLException e ) { e.printStackTrace(); }
-            try { connection.close(); }
-            catch( SQLException e ) { e.printStackTrace(); }
-            connection = null;
-            if( logger.isInfoEnabled() ) {
-                logger.info("Reducing the number of connections from " + connections + " due to rollback.");
+            if (cancelStatements) {
+                int numCancelled = 0;
+                for (Execution event : events) {
+                    final Statement stmt = event.statement;
+                    if (stmt != null) {
+                        try {
+                            if (!stmt.isClosed()) {
+                                stmt.cancel();
+                                numCancelled += 1;
+                            }
+                        } catch (Throwable t) {
+                            logger.error("Problem cancelling statement: " + t.getMessage());
+                        }
+                    }
+                }
+                if (numCancelled > 0) {
+                    if (numCancelled == 1) {
+                        logger.warn("Cancelled 1 query");
+                    } else {
+                        logger.warn("Cancelled " + numCancelled + " queries");
+                    }
+                }
             }
-            connections--;
+            state = "ROLLING BACK";
+            try {
+                connection.rollback();
+            }
+            catch( SQLException e ) {
+                logger.error("Problem with rollback: " + e.getMessage(), e);
+            }
+            try {
+                connection.close();
+                if (logger.isDebugEnabled()) {
+                    logger.debug(connectionCloseLog());
+                }
+            }
+            catch( SQLException e )
+            {
+                logger.error("Problem closing connection: " + e.getMessage(), e);
+            }
+            connection = null;
+            if (tracking) {
+                connections.decrementAndGet();
+            }
             close();
             dirty = true;
-            logger.debug("return - rollback()");
         }
         finally {
-            logger.debug("exit - rollback()");
         }
+    }
+
+    static void loadProperties() {
+        try {
+            InputStream is = DaseinSequencer.class.getResourceAsStream(DaseinSequencer.PROPERTIES);
+            try {
+                if( is != null ) {
+                    properties.load(is);
+                }
+            } finally {
+                if( is != null ) {
+                    is.close();
+                }
+            }
+        } catch (Throwable t) {
+            logger.error("Problem loading dasein persist transaction properties: " + t.getMessage());
+        }
+    }
+
+
+    static boolean isMaidDisabled() {
+        return properties.containsKey(MAID_DISABLED) && properties.getProperty(MAID_DISABLED).equalsIgnoreCase("true");
+    }
+
+    static private long getMsFromSecondsProperty(String propKey, int defaultSeconds) {
+        String secondsStr = properties.getProperty(propKey);
+        if (secondsStr != null) {
+            try {
+                int seconds = Integer.parseInt(secondsStr);
+                return (long)seconds * 1000L;
+            } catch (NumberFormatException ignore) {
+                logger.error("Value for '" + propKey + "' is not an integer, using default: " + defaultSeconds);
+            }
+        }
+        return (long)defaultSeconds * 1000L;
+    }
+
+    static long getMaidFrequencyMs() {
+        return getMsFromSecondsProperty(MAID_FREQUENCY, 5);
+    }
+
+    static long getMaidWarnMs() {
+        return getMsFromSecondsProperty(MAID_WARNSECONDS, 10);
+    }
+
+    static long getMaidMaxMs() {
+        return getMsFromSecondsProperty(MAID_MAXSECONDS, 60);
     }
 }

@@ -94,7 +94,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            std.error("Problem reading " + DaseinSequencer.PROPERTIES + ": " + e.getMessage(), e);
         }
         useSsl = false;
         proxyPort = 0;
@@ -517,8 +517,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                                 keyValues.add(encoded.trim());
                             }
                             catch( UnsupportedEncodingException e ) {
-                                std.error("No such encoding UTF-8: " + e.getMessage());
-                                e.printStackTrace();
+                                std.error("No such encoding UTF-8: " + e.getMessage(), e);
                                 throw new PersistenceException(e);
                             }
                         }
@@ -540,8 +539,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                     return keyMap;
                 }
                 catch( UnsupportedEncodingException e ) {
-                    std.error("No such encoding UTF-8: " + e.getMessage());
-                    e.printStackTrace();
+                    std.error("No such encoding UTF-8: " + e.getMessage(), e);
                     throw new PersistenceException(e);
                 }
             }
@@ -626,8 +624,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                                                 post.addRequestHeader("x-riak-index-" + secondaryKey.getFields()[0].toLowerCase() + "_bin", encoded.trim());
                                             }
                                             catch( UnsupportedEncodingException e ) {
-                                                std.error("No such encoding UTF-8: " + e.getMessage());
-                                                e.printStackTrace();
+                                                std.error("No such encoding UTF-8: " + e.getMessage(), e);
                                                 throw new PersistenceException(e);
                                             }
                                         }
@@ -645,8 +642,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                                     post.addRequestHeader("x-riak-index-" + secondaryKey.getFields()[0].toLowerCase() + "_bin", encoded.trim());
                                 }
                                 catch( UnsupportedEncodingException e ) {
-                                    std.error("No such encoding UTF-8: " + e.getMessage());
-                                    e.printStackTrace();
+                                    std.error("No such encoding UTF-8: " + e.getMessage(), e);
                                     throw new PersistenceException(e);
                                 }
                             }
@@ -1019,7 +1015,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                     }
                 }
                 catch( Exception e ) {
-                    e.printStackTrace();
+                    std.error(e.getMessage(), e);
                     throw new PersistenceException(e);
                 }
             }
