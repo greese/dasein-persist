@@ -56,6 +56,7 @@ import org.dasein.persist.xml.XMLWriter;
 import org.dasein.util.CacheLoader;
 import org.dasein.util.CacheManagementException;
 import org.dasein.util.ConcurrentMultiCache;
+import org.dasein.util.DaseinUtilTasks;
 import org.dasein.util.JitCollection;
 import org.dasein.util.Jiterator;
 import org.dasein.util.JiteratorFilter;
@@ -1683,6 +1684,62 @@ public final class PersistentFactory<T> {
         }
         return params;
     }
+
+    private class PersistentFactoryTask implements Runnable {
+        private final Jiterator<T> it;
+        private final Map<String,Object> results;
+
+        private PersistentFactoryTask(Jiterator<T> it, Map<String,Object> results) {
+            this.it = it;
+            this.results = results;
+        }
+
+        @Override
+        public void run() {
+            try {
+                for( Map<String,Object> map: (Collection<Map<String,Object>>)this.results.get(LISTING) ) {
+                    T item = null;
+
+                    if( singletons.size() > 0 ) {
+                        for( String key : singletons.keySet() ) {
+                            Object ob = map.get(key);
+
+                            if( ob instanceof java.math.BigDecimal ) {
+                                java.math.BigDecimal tmp = (java.math.BigDecimal)ob;
+
+                                ob = tmp.longValue();
+                                map.put(key, ob);
+                            }
+                            item = cache.find(key, ob);
+                            if( item != null ) {
+                                break;
+                            }
+                        }
+                    }
+                    if( item == null ) {
+                        if( dependency != null ) {
+                            try {
+                                dependency.loadDependencies(map);
+                            }
+                            catch( PersistenceException e ) {
+                                it.setLoadException(e);
+                                return;
+                            }
+                        }
+                        item = cache.find(map);
+                    }
+                    this.it.push(item);
+                }
+                this.it.complete();
+            }
+            catch( Exception e ) {
+                this.it.setLoadException(e);
+            }
+            catch( Throwable t ) {
+                this.it.setLoadException(new RuntimeException(t));
+            }
+        }
+    }
     
     @SuppressWarnings("unchecked")
     private Collection<T> load(Class<? extends Execution> cls, JiteratorFilter<T> filter, SearchTerm ... usingTerms) throws PersistenceException {
@@ -1698,88 +1755,7 @@ public final class PersistentFactory<T> {
                 
                 results = xaction.execute(cls, params);
                 xaction.commit();
-                Thread t = new Thread() {
-                    public void run() {
-                        try {
-                            for( Map<String,Object> map: (Collection<Map<String,Object>>)results.get(LISTING) ) {
-                                T item = null;
-                                
-                                if( singletons.size() > 0 ) {
-                                    for( String key : singletons.keySet() ) {
-                                        Object ob = map.get(key);
-                                        
-                                        if( ob instanceof java.math.BigDecimal ) {
-                                            java.math.BigDecimal tmp = (java.math.BigDecimal)ob;
-                                            
-                                            ob = tmp.longValue();
-                                            map.put(key, ob);
-                                        }
-                                        item = cache.find(key, ob);
-                                        if( item != null ) {
-                                            break;
-                                        }
-                                    }
-                                }
-                                if( item == null ) {
-                                    if( dependency != null ) {
-                                        try {
-                                            dependency.loadDependencies(map);
-                                        }
-                                        catch( PersistenceException e ) {
-                                            it.setLoadException(e);
-                                            return;
-                                        }
-                                    }
-                                    item = cache.find(map);
-                                }
-                                /*
-                                if( dependency != null ) {
-                                    if( singletons.size() > 0 ) {
-                                        for( String key : singletons.keySet() ) {
-                                            Object ob = map.get(key);
-                                            
-                                            if( ob.getClass().getName().equals(java.math.BigDecimal.class.getName()) ) {
-                                                java.math.BigDecimal tmp = (java.math.BigDecimal)ob;
-                                                
-                                                ob = tmp.longValue();
-                                                map.put(key, ob);
-                                            }
-                                            item = cache.find(key, ob);
-                                            if( item != null ) {
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    if( item == null ) {
-                                        try {
-                                            dependency.loadDependencies(map);
-                                        }
-                                        catch( PersistenceException e ) {
-                                            it.setLoadException(e);
-                                            return;
-                                        }
-                                    }
-                                }
-                                if( item == null ) {
-                                    item = cache.find(map);
-                                }
-                                */
-                                it.push(item);
-                            }
-                            it.complete();
-                        }
-                        catch( Exception e ) {
-                            it.setLoadException(e);
-                        }
-                        catch( Throwable t ) {
-                            it.setLoadException(new RuntimeException(t));
-                        }
-                    }
-                };
-                
-                t.setDaemon(true);
-                t.setName("Loader");
-                t.start();
+                DaseinUtilTasks.submit(new PersistentFactoryTask(it, results));
                 return new JitCollection<T>(it, cache.getTarget().getName());
             }
             catch( PersistenceException e ) {

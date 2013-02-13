@@ -43,6 +43,7 @@ import org.apache.log4j.Logger;
 import org.dasein.persist.dao.LoadTranslator;
 import org.dasein.persist.dao.RemoveTranslator;
 import org.dasein.persist.dao.SaveTranslator;
+import org.dasein.util.DaseinUtilTasks;
 import org.dasein.util.Translator;
 
 /**
@@ -106,18 +107,16 @@ public abstract class Execution {
         catch( Exception e ) {
             logger.error("Problem reading " + PROPERTIES + ": " + e.getMessage(), e);
         }
-        Thread stackPusher = new Thread() {
-            public void run() {
-                pushExecutions();
-            }
-        };
-        
-        stackPusher.setPriority(Thread.NORM_PRIORITY-1);
-        stackPusher.setDaemon(true);
-        stackPusher.setName("dasein-persistence - STACK PUSHER");
-        stackPusher.start();
+        DaseinUtilTasks.submit(new StackPusher());
     }
-    
+
+    private static class StackPusher implements Runnable {
+        @Override
+        public void run() {
+            pushExecutions();
+        }
+    }
+
     static public String getDataSourceName(String cname) {
         return getDataSourceName(cname, false);
     }
