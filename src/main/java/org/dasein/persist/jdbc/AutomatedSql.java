@@ -469,7 +469,7 @@ public class AutomatedSql extends Execution {
             prepareFor(col, i, ob, Class.forName(owner));
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("", e);
             throw new SQLException(e.getMessage());
         }
     }
@@ -482,7 +482,7 @@ public class AutomatedSql extends Execution {
                 f = owner.getDeclaredField(col);
             }
             catch( SecurityException e ) {
-                e.printStackTrace();
+                logger.error("", e);
             }
             catch( NoSuchFieldException e ) {
                 // ignore
@@ -533,7 +533,7 @@ public class AutomatedSql extends Execution {
             setTarget(Class.forName(cname));
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("", e);
         }
     }
 

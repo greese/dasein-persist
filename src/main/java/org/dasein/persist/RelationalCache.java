@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
-import org.dasein.util.Jiterator;
 import org.dasein.persist.jdbc.Counter;
 import org.dasein.persist.jdbc.Creator;
 import org.dasein.persist.jdbc.Deleter;
@@ -35,7 +34,9 @@ import org.dasein.persist.jdbc.AutomatedSql.TranslationMethod;
 import org.dasein.util.CacheLoader;
 import org.dasein.util.CachedItem;
 import org.dasein.util.CacheManagementException;
+import org.dasein.util.DaseinUtilTasks;
 import org.dasein.util.JitCollection;
+import org.dasein.util.Jiterator;
 import org.dasein.util.JiteratorFilter;
 
 public final class RelationalCache<T extends CachedItem> extends PersistentCache<T> {
@@ -336,7 +337,7 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
                             list = RelationalCache.this.load(getLoader(terms, null), null, toParams(terms));
                         }
                         catch( Throwable forgetIt ) {
-                            e.printStackTrace();
+                            logger.error(forgetIt.getMessage(), forgetIt);
                             throw new RuntimeException(e);
                         }
                     }
@@ -360,7 +361,7 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
                     throw (PersistenceException)t;
                 }
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(e.getMessage(), e);
                 }
                 throw new PersistenceException(e);
             }
@@ -445,6 +446,39 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
         }
         return params;
     }
+
+    private class RelationalCacheTask implements Runnable {
+        private final Jiterator<T> it;
+        private final Map<String,Object> results;
+
+        private RelationalCacheTask(Jiterator<T> it, Map<String,Object> results) {
+            this.it = it;
+            this.results = results;
+        }
+
+        @Override
+        public void run() {
+            try {
+                for( Map<String,Object> map: (Collection<Map<String,Object>>)this.results.get(Loader.LISTING) ) {
+                    for( String fieldName : map.keySet() ) {
+                        LookupDelegate delegate = getLookupDelegate(fieldName);
+
+                        if( delegate != null && !delegate.validate((String)map.get(fieldName)) ) {
+                            throw new PersistenceException("Unable to validate " + fieldName + " value of " + map.get(fieldName));
+                        }
+                    }
+                    this.it.push(getCache().find(map));
+                }
+                this.it.complete();
+            }
+            catch( Exception e ) {
+                this.it.setLoadException(e);
+            }
+            catch( Throwable t ) {
+                this.it.setLoadException(new RuntimeException(t));
+            }
+        }
+    }
     
     @SuppressWarnings("unchecked")
     private Collection<T> load(Loader loader, JiteratorFilter<T> filter, Map<String,Object> params) throws PersistenceException {
@@ -459,33 +493,8 @@ public final class RelationalCache<T extends CachedItem> extends PersistentCache
                 
                 results = xaction.execute(loader, params, readDataSource);
                 xaction.commit();
-                Thread t = new Thread() {
-                    public void run() {
-                        try {
-                            for( Map<String,Object> map: (Collection<Map<String,Object>>)results.get(Loader.LISTING) ) {
-                                for( String fieldName : map.keySet() ) {
-                                    LookupDelegate delegate = getLookupDelegate(fieldName);
-                                    
-                                    if( delegate != null && !delegate.validate((String)map.get(fieldName)) ) {
-                                        throw new PersistenceException("Unable to validate " + fieldName + " value of " + map.get(fieldName));
-                                    }
-                                }
-                                it.push(getCache().find(map));
-                            }
-                            it.complete();
-                        }
-                        catch( Exception e ) {
-                            it.setLoadException(e);
-                        }
-                        catch( Throwable t ) {
-                            it.setLoadException(new RuntimeException(t));
-                        }
-                    }
-                };
-                
-                t.setDaemon(true);
-                t.setName("Loader");
-                t.start();
+
+                DaseinUtilTasks.submit(new RelationalCacheTask(it, results));
                 return new JitCollection<T>(it, getEntityClassName());
             }
             catch( PersistenceException e ) {
