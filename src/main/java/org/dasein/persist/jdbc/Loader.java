@@ -181,7 +181,8 @@ public class Loader extends AutomatedSql {
         map.put(LISTING, list);
         prepare(params);
         ResultSet results = statement.executeQuery();
-        
+        long queryStartTimestamp = System.currentTimeMillis();
+
         try {
             while( results.next() ) {
                 HashMap<String,Object> state = new HashMap<String,Object>();
@@ -198,9 +199,16 @@ public class Loader extends AutomatedSql {
             try { results.close(); }
             catch( SQLException e ) { }
         }
+
         long endTimestamp = System.currentTimeMillis();
+
         if( (endTimestamp - startTimestamp) > (2000L) ) {
-            logger.warn("SLOW QUERY: " + sql);
+            String totalTime = Long.toString((endTimestamp - startTimestamp));
+            String totalQueryTime = Long.toString((endTimestamp - queryStartTimestamp));
+
+            String debugTiming = "[total: "+ totalTime + ",query: " + totalQueryTime+"]";
+
+            logger.warn("SLOW QUERY: " + sql + " "+ debugTiming);
         }
         if( isTranslating() ) {
             for( Map<String,Object> item : list ) {
