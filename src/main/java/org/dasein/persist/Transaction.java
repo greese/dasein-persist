@@ -108,6 +108,7 @@ public class Transaction {
             long freq = getMaidFrequencyMs();
             while (true) {
                 if (cycleCount % 21 == 20) {
+                    loadProperties();
                     warn = getMaidWarnMs();
                     max = getMaidMaxMs();
                     freq = getMaidFrequencyMs();
