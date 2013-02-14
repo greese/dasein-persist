@@ -20,10 +20,15 @@
 /* Copyright (c) 2006 Valtira Corporation, All Rights Reserved */
 package org.dasein.persist;
 
+import org.apache.log4j.Logger;
+
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
-public class ConnectionMonitor  implements ServletContextListener {
+public class ConnectionMonitor implements ServletContextListener {
+
+    private static final Logger logger = Logger.getLogger(ConnectionMonitor.class);
+
     private boolean running = false;
     
     public void contextInitialized(ServletContextEvent event) {
@@ -37,18 +42,18 @@ public class ConnectionMonitor  implements ServletContextListener {
                         report();
                     }
                 }
-                System.out.println("Dasein connection monitor is shut down.");
+                logger.info("Dasein connection monitor is shut down.");
             }
         };
-        System.out.println("The Dasein connection monitor is installed and will report every minute.");
-        System.out.println("To turn off the Dasein connection monitor, remove the listener entry from your web.xml.");
+        logger.info("The Dasein connection monitor is installed and will report every minute.");
+        logger.info("To turn off the Dasein connection monitor, remove the listener entry from your web.xml.");
         t.setDaemon(false);
         t.setName("DASEIN CONNECTION MONITOR");
         t.start();
     }
     
     public void contextDestroyed(ServletContextEvent event) {
-        System.out.println("Shutting down the Dasein connection monitor.");
+        logger.info("Shutting down the Dasein connection monitor.");
         synchronized( this ) {
             running = false;
             notifyAll();

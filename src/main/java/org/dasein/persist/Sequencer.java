@@ -121,7 +121,7 @@ public abstract class Sequencer {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error(e.getMessage(), e);
         }
         defaultSequencer = def;
     }
@@ -154,7 +154,7 @@ public abstract class Sequencer {
                         seq = defaultSequencer.newInstance();
                     }
                     catch( Exception e ) {
-                        e.printStackTrace();
+                        logger.error(e.getMessage(), e);
                         return null;
                     }
                     seq.setName(name);

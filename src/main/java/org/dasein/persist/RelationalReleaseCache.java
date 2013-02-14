@@ -362,7 +362,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
                             list = RelationalReleaseCache.this.load(getLoader(terms, null), null, toParams(terms));
                         }
                         catch( Throwable forgetIt ) {
-                            e.printStackTrace();
+                            logger.error(forgetIt.getMessage(), forgetIt);
                             throw new RuntimeException(e);
                         }
                     }
@@ -386,7 +386,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
                     throw (PersistenceException)t;
                 }
                 if( logger.isDebugEnabled() ) {
-                    e.printStackTrace();
+                    logger.error(e.getMessage(), e);
                 }
                 throw new PersistenceException(e);
             }

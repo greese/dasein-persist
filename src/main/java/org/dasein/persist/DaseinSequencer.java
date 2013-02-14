@@ -93,7 +93,7 @@ public class DaseinSequencer extends Sequencer {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem loading " + PROPERTIES + ": " + e.getMessage(), e);
         }
         dsn = props.getProperty("dasein.seqdsn");
         dataSourceName = dsn;

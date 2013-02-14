@@ -43,6 +43,7 @@ import org.apache.log4j.Logger;
 import org.dasein.persist.dao.LoadTranslator;
 import org.dasein.persist.dao.RemoveTranslator;
 import org.dasein.persist.dao.SaveTranslator;
+import org.dasein.util.DaseinUtilTasks;
 import org.dasein.util.Translator;
 
 /**
@@ -78,8 +79,8 @@ public abstract class Execution {
             Properties props = new Properties();
             Enumeration propenum;
 
-            System.out.println("Looking up: " + PROPERTIES);
-            System.out.println("Location:   " + Sequencer.class.getResource(PROPERTIES));
+            logger.info("Looking up: " + PROPERTIES);
+            logger.info("Location:   " + Sequencer.class.getResource(PROPERTIES));
             if( is != null ) {
                 props.load(is);
             }
@@ -88,6 +89,7 @@ public abstract class Execution {
                 String path = System.getenv(DASEIN_PERSIST_PROPERTIES);
                 if (path != null && !path.isEmpty()) {
                     is = new FileInputStream(path);
+                    // todo: 'is' is ignored
                 }
             }
             propenum = props.propertyNames();
@@ -103,20 +105,18 @@ public abstract class Execution {
             }
         }
         catch( Exception e ) {
-            e.printStackTrace();
+            logger.error("Problem reading " + PROPERTIES + ": " + e.getMessage(), e);
         }
-        Thread stackPusher = new Thread() {
-            public void run() {
-                pushExecutions();
-            }
-        };
-        
-        stackPusher.setPriority(Thread.NORM_PRIORITY-1);
-        stackPusher.setDaemon(true);
-        stackPusher.setName("dasein-persistence - STACK PUSHER");
-        stackPusher.start();
+        DaseinUtilTasks.submit(new StackPusher());
     }
-    
+
+    private static class StackPusher implements Runnable {
+        @Override
+        public void run() {
+            pushExecutions();
+        }
+    }
+
     static public String getDataSourceName(String cname) {
         return getDataSourceName(cname, false);
     }
@@ -224,7 +224,7 @@ public abstract class Execution {
                 }
             }
             catch( Throwable t ) {
-                t.printStackTrace();
+                logger.error("Problem pushing executions: " + t.getMessage(), t);
             }
             finally {
                 tmp.clear();                
@@ -375,8 +375,7 @@ public abstract class Execution {
                 }
             }
             catch( SQLException e ) {
-                logger.debug("Error executing event: " + e.getMessage());
-                e.printStackTrace();
+                logger.debug("Error executing event: " + e.getMessage(), e);
                 throw new PersistenceException(e.getMessage());
             }
         }
