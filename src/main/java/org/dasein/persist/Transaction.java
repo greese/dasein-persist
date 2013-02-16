@@ -556,7 +556,6 @@ public class Transaction {
                 ds = (DataSource)ctx.lookup(dsn);
                 conn = ds.getConnection();
                 openTime = System.currentTimeMillis();
-                logger.warn("DPTRANSID-" + transactionId + " connection.get - dsn='" + dsn + '\'');
                 if( logger.isDebugEnabled() ) {
                     logger.debug("DPTRANSID-" + transactionId + " connection.get - dsn='" + dsn + '\'');
                 }
