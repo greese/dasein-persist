@@ -197,7 +197,9 @@ public class Loader extends AutomatedSql {
         }
         finally {
             try { results.close(); }
-            catch( SQLException e ) { }
+            catch( SQLException e ) {
+                logger.error("Problem closing results: " + e.getMessage(), e);
+            }
         }
 
         long endTimestamp = System.currentTimeMillis();
