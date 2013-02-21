@@ -181,7 +181,7 @@ public class Loader extends AutomatedSql {
         map.put(LISTING, list);
         prepare(params);
         ResultSet results = statement.executeQuery();
-        long queryStartTimestamp = System.currentTimeMillis();
+        long queryStopTimestamp = System.currentTimeMillis();
 
         try {
             while( results.next() ) {
@@ -205,10 +205,10 @@ public class Loader extends AutomatedSql {
         long endTimestamp = System.currentTimeMillis();
 
         if( (endTimestamp - startTimestamp) > (2000L) ) {
-            String totalTime = Long.toString((endTimestamp - startTimestamp));
-            String totalQueryTime = Long.toString((endTimestamp - queryStartTimestamp));
+            String queryTime = Long.toString((queryStopTimestamp - startTimestamp));
+            String totalRsTime = Long.toString((endTimestamp - queryStopTimestamp));
 
-            String debugTiming = "[total: "+ totalTime + ",query: " + totalQueryTime+"]";
+            String debugTiming = "[query: "+ queryTime + ",rs: " + totalRsTime+"]";
 
             logger.warn("SLOW QUERY: " + sql + " "+ debugTiming);
         }
