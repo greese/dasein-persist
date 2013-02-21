@@ -80,6 +80,10 @@ public class Transaction {
      * Cache of Execution objects to minimize dynamically created SQL
      */
     static private final Map<String,Stack<Execution>> eventCache = new ConcurrentHashMap<String, Stack<Execution>>(8, 0.9f, 1);
+    /**
+     * Cache of DataSource instances. JNDI blocks on System properties.
+     */
+    static private final Map<String,DataSource> dsCache = new ConcurrentHashMap<String, DataSource>(8, 0.9f, 1);
 
     static private final AtomicBoolean maidLaunched = new AtomicBoolean(false);
 
@@ -552,8 +556,20 @@ public class Transaction {
                 if( dsn == null ) {
                     dsn = event.getDataSource();
                 }
+                if (dsn == null) {
+                    throw new PersistenceException("No data source name");
+                }
                 state = "LOOKING UP";
-                ds = (DataSource)ctx.lookup(dsn);
+                ds = dsCache.get(dsn);
+                if (ds == null) {
+                    ds = (DataSource)ctx.lookup(dsn);
+                    if (ds != null) {
+                        dsCache.put(dsn, ds);
+                    }
+                }
+                if (ds == null) {
+                    throw new PersistenceException("Could not find data source: " + dsn);
+                }
                 conn = ds.getConnection();
                 openTime = System.currentTimeMillis();
                 if( logger.isDebugEnabled() ) {
