@@ -39,6 +39,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.httpclient.Header;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.HttpException;
+import org.apache.commons.httpclient.HttpMethod;
 import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.httpclient.methods.DeleteMethod;
 import org.apache.commons.httpclient.methods.GetMethod;
@@ -189,11 +190,15 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
     
     private HttpClient getClient() {
         HttpClient client = new HttpClient();
-        
+
         if( proxyHost != null ) {
             client.getHostConfiguration().setProxy(proxyHost, proxyPort);
         }
         return client;
+    }
+
+    private void addCommonRequestHeaders(HttpMethod method) {
+        method.setRequestHeader("Connection", "close");
     }
     
     private String getEndpoint() {
@@ -363,6 +368,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
             
             HttpClient client = getClient();
             PostMethod post = new PostMethod(getEndpoint() + "mapred");
+            addCommonRequestHeaders(post);
             int code;
             
             try {
@@ -394,7 +400,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
             }
             try {
                 String body = post.getResponseBodyAsString();
-                
+
                 try {
                     if( wire.isDebugEnabled() ) {
                         wire.debug("----------------------------------------");
@@ -569,6 +575,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                 
                 HttpClient client = getClient();
                 PostMethod post = new PostMethod(url.toString());
+                addCommonRequestHeaders(post);
                 int code;
 
                 try {
@@ -861,6 +868,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
 
                 HttpClient client = getClient();
                 PostMethod post = new PostMethod(getEndpoint() + "mapred");
+                addCommonRequestHeaders(post);
                 int code;
                 
                 try {
@@ -1135,6 +1143,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
             
             HttpClient client = getClient();
             GetMethod get = new GetMethod(url.toString());
+            addCommonRequestHeaders(get);
             int code;
             
             if( wire.isDebugEnabled() ) {
@@ -1227,6 +1236,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
 
                         HttpClient client = getClient();
                         GetMethod get = new GetMethod(url.toString());
+                        addCommonRequestHeaders(get);
                         int code;
                         
                         try {
@@ -1467,6 +1477,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
             try {
                 HttpClient client = getClient();
                 GetMethod get = new GetMethod(listEndpoint);
+                addCommonRequestHeaders(get);
                 int code;
                 
                 if( wire.isDebugEnabled() ) {
@@ -1753,6 +1764,7 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
             
             HttpClient client = getClient();
             DeleteMethod delete = new DeleteMethod(url.toString());
+            addCommonRequestHeaders(delete);
             int code;
             
             try {
