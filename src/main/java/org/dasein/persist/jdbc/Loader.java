@@ -73,7 +73,7 @@ public class Loader extends AutomatedSql {
                 str.append(" FROM ");
                 str.append(getIdentifier(getTableName()));
                 if( !getCriteria().isEmpty() ) {
-                    ArrayList<Class<? extends CachedItem>> joins = new ArrayList<Class<? extends CachedItem>>();
+                    ArrayList<Class<? extends CachedItem>> joins = new ArrayList<Class<? extends CachedItem>>(4);
                     Iterator<Criterion> criteria;
 
                     criteria = getCriteria().iterator();
@@ -174,7 +174,7 @@ public class Loader extends AutomatedSql {
     
     public Map<String,Object> run(Transaction xaction, Map<String,Object> params) throws SQLException, PersistenceException {
         ArrayList<Map<String,Object>> list = new ArrayList<Map<String,Object>>();
-        HashMap<String,Object> map = new HashMap<String,Object>();
+        HashMap<String,Object> map = new HashMap<String,Object>(1);
         int count = getColumns().size();
         long startTimestamp = System.currentTimeMillis();
         
@@ -413,4 +413,9 @@ public class Loader extends AutomatedSql {
         }
         return rs.getBigDecimal(i);
     }
+    
+    @Override
+	public boolean isReadOnly() {
+		return true;
+	}
 }

@@ -238,4 +238,9 @@ public class MockPersistentCache<T extends CachedItem> extends PersistentCache<T
             cache.put(key, item);
         }
     }
+    
+    @Override
+	public T get(SearchTerm... terms) throws PersistenceException {
+		throw new PersistenceException("Not implemented");
+	}
 }

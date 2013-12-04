@@ -22,20 +22,21 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
-import org.dasein.util.Jiterator;
+import org.dasein.persist.jdbc.AutomatedSql.Operator;
+import org.dasein.persist.jdbc.AutomatedSql.TranslationMethod;
 import org.dasein.persist.jdbc.Counter;
 import org.dasein.persist.jdbc.Creator;
 import org.dasein.persist.jdbc.Deleter;
 import org.dasein.persist.jdbc.Loader;
 import org.dasein.persist.jdbc.Updater;
-import org.dasein.persist.jdbc.AutomatedSql.Operator;
-import org.dasein.persist.jdbc.AutomatedSql.TranslationMethod;
 import org.dasein.util.CacheLoader;
-import org.dasein.util.CachedItem;
 import org.dasein.util.CacheManagementException;
+import org.dasein.util.CachedItem;
 import org.dasein.util.JitCollection;
+import org.dasein.util.Jiterator;
 import org.dasein.util.JiteratorFilter;
 
 /**
@@ -59,6 +60,8 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
     private TranslationMethod translationMethod = TranslationMethod.NONE;
     private String            writeDataSource   = null;
 
+    private ConcurrentHashMap<String,ConcurrentHashMap<String,T>> secondaryCache = null;
+    
     public RelationalReleaseCache() {
 
     	Thread t = new Thread() {
@@ -70,6 +73,11 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
 					while (true) {
 						sleep(60 * 60 * 1000); // wait an hour
 						getCache().releaseAll();
+						if (secondaryCache != null) {
+							for (ConcurrentHashMap<String,T> c : secondaryCache.values()) {
+								c.clear();
+							}
+						}
 					}
 
 				} catch (InterruptedException e) {
@@ -97,6 +105,14 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
         if( writeDataSource == null ) {
             writeDataSource = readDataSource;
         }
+        
+        if (keys != null && keys.length > 0) {
+        	
+        	secondaryCache = new ConcurrentHashMap<String,ConcurrentHashMap<String,T>>(keys.length);
+        	for (Key k : keys) {
+        		secondaryCache.put(k.toString(), new ConcurrentHashMap<String,T>(0));
+        	}
+        }
     }
 
     private Counter getCounter(SearchTerm[] whereTerms) {
@@ -107,7 +123,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
             public void init() {
                 setTarget(self.getEntityClassName());
                 if( terms != null && terms.length > 0 ) {
-                    ArrayList<Criterion> criteria = new ArrayList<Criterion>();
+                    ArrayList<Criterion> criteria = new ArrayList<Criterion>(terms.length);
 
                     for( SearchTerm term : terms ) {
                         criteria.add(new Criterion(term.getColumn(), term.getOperator()));
@@ -151,7 +167,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
             public void init() {
                 setTarget(self.getEntityClassName());
                 if( killTerms != null && killTerms.length > 0 ) {
-                    ArrayList<Criterion> criteria = new ArrayList<Criterion>();
+                    ArrayList<Criterion> criteria = new ArrayList<Criterion>(killTerms.length);
 
                     for( SearchTerm term : killTerms ) {
                         criteria.add(new Criterion(term.getJoinEntity(), term.getColumn(), term.getOperator()));
@@ -186,7 +202,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
                 setTarget(self.getEntityClassName());
                 setEntityJoins(getJoins());
                 if( terms != null && terms.length > 0 ) {
-                    ArrayList<Criterion> criteria = new ArrayList<Criterion>();
+                    ArrayList<Criterion> criteria = new ArrayList<Criterion>(terms.length);
 
                     for( SearchTerm term : terms ) {
                         criteria.add(new Criterion(term.getJoinEntity(), term.getColumn(), term.getOperator()));
@@ -194,7 +210,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
                     setCriteria(criteria.toArray(new Criterion[criteria.size()]));
                 }
                 if( order != null && order.length > 0 ) {
-                    ArrayList<String> cols = new ArrayList<String>();
+                    ArrayList<String> cols = new ArrayList<String>(order.length);
                     boolean desc = order[0].descending;
 
                     for( OrderedColumn col : order ) {
@@ -253,7 +269,7 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
                 Map<String,Object> results;
                 long count;
 
-                results = xaction.execute(counter, new HashMap<String,Object>(), readDataSource);
+                results = xaction.execute(counter, new HashMap<String,Object>(0), readDataSource);
                 count = ((Number)results.get("count")).longValue();
                 xaction.commit();
                 return count;
@@ -400,6 +416,73 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
     }
 
     @Override
+	public T get(SearchTerm... terms) throws PersistenceException {
+    	if (logger.isDebugEnabled()) {
+			logger.debug("get(SearchTerm... terms) - enter");
+		}
+		try {
+			Key k = matchKeys(terms);
+			if (logger.isDebugEnabled()) {
+				logger.debug("Key: " + k);
+			}
+			if (k != null) {
+				if (logger.isDebugEnabled()) {
+					logger.debug("Executing cache find...");
+				}
+				try {
+					ConcurrentHashMap<String,T> cache = secondaryCache.get(k.toString());
+					
+					if (logger.isDebugEnabled()) {
+						logger.debug("Found cache...");
+					}
+					
+					String itemKey = getKeyValue(terms, k);
+					
+					if (logger.isDebugEnabled()) {
+						logger.debug("Generated key value..." + itemKey);
+					}
+					
+					T t = cache.get(itemKey);
+					
+					if (logger.isDebugEnabled()) {
+						logger.debug("Hit cache..." + t);
+					}
+					
+					if (t == null || t instanceof CachedItem && !((CachedItem) t).isValidForCache()) {
+						
+						if (logger.isDebugEnabled()) {
+							logger.debug("Loading from RelationalCache...");
+						}
+						Collection<T> list = find(terms);
+						
+						if (list != null && !list.isEmpty()) {
+							t = list.iterator().next();							
+							cache.put(itemKey, t);							
+						}
+					}
+					return t;
+					
+				} catch (RuntimeException e) {
+					Throwable t = e.getCause();
+
+					if (t != null && t instanceof PersistenceException) {
+						throw (PersistenceException) t;
+					}
+					if (logger.isDebugEnabled()) {
+						logger.error(e.getMessage(), e);
+					}
+					throw new PersistenceException(e);
+				}
+			}
+			return null;
+		} finally {
+			if (logger.isDebugEnabled()) {
+				logger.debug("get(SearchTerm... terms) - exit");
+			}
+		}
+	}
+    
+    @Override
     public String getSchema() throws PersistenceException {
         StringBuilder schema = new StringBuilder();
 
@@ -428,12 +511,15 @@ public final class RelationalReleaseCache<T extends CachedItem> extends Persiste
     }
 
     private Map<String,Object> toParams(SearchTerm ... searchTerms) {
-        HashMap<String,Object> params = new HashMap<String,Object>();
+        HashMap<String,Object> params = null;
 
         if( searchTerms != null ) {
+        	params = new HashMap<String,Object>(searchTerms.length);
             for( SearchTerm term : searchTerms ) {
                 params.put(term.getColumn(), term.getValue());
             }
+        } else {
+        	params = new HashMap<String,Object>(0);
         }
         return params;
     }
