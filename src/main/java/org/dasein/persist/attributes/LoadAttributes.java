@@ -242,4 +242,9 @@ public class LoadAttributes extends Execution {
         }
         return attributes;
     }
+    
+    @Override
+	public boolean isReadOnly() {
+		return true;
+	}
 }

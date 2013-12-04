@@ -142,4 +142,9 @@ public class LoadTypes extends Execution {
         map.put(AttributeDAO.ATTRIBUTES, new DataTypeMap(types)); 
         return map;
     }
+
+	@Override
+	public boolean isReadOnly() {
+		return true;
+	}
 }

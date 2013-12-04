@@ -134,4 +134,9 @@ public class LoadTranslator extends Execution {
             xaction.rollback();
         }
     }
+    
+    @Override
+	public boolean isReadOnly() {
+		return true;
+	}
 }

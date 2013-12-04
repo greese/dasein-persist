@@ -581,7 +581,9 @@ public class Transaction {
                 logger.error("Problem with datasource: " + e.getMessage());
                 throw new PersistenceException(e.getMessage());
             }
-            conn.setAutoCommit(false);
+            if (!readOnly) {
+            	conn.setAutoCommit(false);
+            }
             conn.setReadOnly(readOnly);
             connection = conn;
             if (tracking) {
