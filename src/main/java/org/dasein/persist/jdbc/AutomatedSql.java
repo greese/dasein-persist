@@ -575,8 +575,8 @@ public class AutomatedSql extends Execution {
     private Map<String,Translator<String>> loadCustomTranslations(Transaction xaction, String id) throws PersistenceException, SQLException {
         logger.debug("enter - loadTranslations(Transaction,String)");
         try {
-            Map<String,Object> criteria = new HashMap<String,Object>();
-            Map<String,Translator<String>> map = new HashMap<String,Translator<String>>();
+            Map<String,Object> criteria = new HashMap<String,Object>(1);
+            Map<String,Translator<String>> map = null;
             Class<?> cls = getTarget();
 
             criteria.put("ownerId", id);
@@ -584,6 +584,7 @@ public class AutomatedSql extends Execution {
                 xloader = PersistentFactory.compileTranslator(cls, "Loader");
             }
             criteria = xaction.execute(xloader, criteria, Execution.getDataSourceName(cls.getName()));
+            map = new HashMap<String,Translator<String>>(criteria.keySet().size());
             // a retarded side-effect of the lame-ass implementation of generics in Java
             for( String attr : criteria.keySet() ) {
                 Object trans = criteria.get(attr);
@@ -609,7 +610,7 @@ public class AutomatedSql extends Execution {
     private transient Class<? extends Execution> xdeleter = null;
 
     private void removeCustomTranslations(Transaction xaction, String id) throws PersistenceException, SQLException {
-        Map<String,Object> state = new HashMap<String,Object>();
+        Map<String,Object> state = new HashMap<String,Object>(1);
         Class<?> cls = getTarget();
 
         state.put("ownerId", id);
@@ -634,7 +635,7 @@ public class AutomatedSql extends Execution {
     private transient Class<? extends Execution> xupdater = null;
 
     private void saveCustomTranslations(Transaction xaction, String id, String attr, Translator<String> t ) throws PersistenceException, SQLException {
-        Map<String,Object> state = new HashMap<String,Object>();
+        Map<String,Object> state = new HashMap<String,Object>(3);
         Class cls = getTarget();
 
         state.put("ownerId", id);

@@ -50,6 +50,7 @@ import org.dasein.persist.Key;
 import org.dasein.persist.Memento;
 import org.dasein.persist.PersistenceException;
 import org.dasein.persist.PersistentCache;
+import org.dasein.persist.RelationalCache;
 import org.dasein.persist.SearchTerm;
 import org.dasein.persist.Transaction;
 import org.dasein.persist.jdbc.AutomatedSql.Operator;
@@ -1316,6 +1317,11 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
         }
     }
 
+    @Override
+	public T get(SearchTerm... terms) throws PersistenceException {
+    	return null;
+	}
+    
     @Override
     public String getSchema() throws PersistenceException {
         if( std.isTraceEnabled() ) {

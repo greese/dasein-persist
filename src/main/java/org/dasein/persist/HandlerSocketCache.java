@@ -65,6 +65,7 @@ import com.google.code.hs4j.impl.HSClientImpl;
  * @see {@link HandlerSocketCache.getSession()}
  * @see https://github.com/ahiguti/HandlerSocket-Plugin-for-MySQL/blob/master/docs-en/protocol.en.txt
  * @see http://code.google.com/p/hs4j/wiki/GettingStarted
+ * @Deprecated("Use Memcache in MySQL 5.6 rather than HandlerSocket")
  */
 public class HandlerSocketCache<T extends CachedItem> extends PersistentCache<T> {
 	static public final Logger logger = Logger.getLogger(HandlerSocketCache.class);
@@ -519,5 +520,10 @@ public class HandlerSocketCache<T extends CachedItem> extends PersistentCache<T>
         }
         return ob;
     }
+
+	@Override
+	public T get(SearchTerm... terms) throws PersistenceException {
+		throw new PersistenceException("Not implemented");
+	}
     
 }

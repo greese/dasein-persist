@@ -69,6 +69,7 @@ import com.google.code.hs4j.impl.HSClientImpl;
  * @author morgan
  *
  * @param <T>
+ * @Deprecated("Use Memcache in MySQL 5.6 rather than HandlerSocket")
  */
 public final class RelationalHSCache<T extends CachedItem> extends PersistentCache<T> {
 	static public final Logger logger = Logger.getLogger(RelationalCache.class);
@@ -922,4 +923,9 @@ public final class RelationalHSCache<T extends CachedItem> extends PersistentCac
         schema.append(");");
         return schema.toString();
     }
+    
+    @Override
+	public T get(SearchTerm... terms) throws PersistenceException {
+		throw new PersistenceException("Not implemented");
+	}
 }

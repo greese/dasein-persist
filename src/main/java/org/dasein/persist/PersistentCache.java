@@ -181,7 +181,16 @@ public abstract class PersistentCache<T extends CachedItem> {
             for( Field field : cls.getDeclaredFields() ) {
                 for( Annotation annotation : field.getDeclaredAnnotations() ) {
                     if( annotation instanceof Index ) {
+                    	
+                    	if (logger.isDebugEnabled()) {
+                    		logger.debug("Processing Index for: "  + cls.getName() + "." + field.getName());
+                    	}
+                    	
                         Index idx = (Index)annotation;
+                        
+                        if (logger.isDebugEnabled()) {
+                    		logger.debug("Index is: "  + idx);
+                    	}
                         
                         if( idx.type().equals(IndexType.SECONDARY) || idx.type().equals(IndexType.FOREIGN) ) {
                             String keyName = field.getName();
@@ -257,7 +266,7 @@ public abstract class PersistentCache<T extends CachedItem> {
                 throw new PersistenceException("No persistent cache implementations defined.");
             }
             try {
-                cache = (PersistentCache<? extends CachedItem>)Class.forName(prop).newInstance();
+            	cache = (PersistentCache<? extends CachedItem>)Class.forName(prop).newInstance();
                 cache.initBase(forClass, alternateEntytName, schemaVersion, mappers, new Key(primaryKey), keys.toArray(new Key[keys.size()]));
             }
             catch( Throwable t ) {
@@ -329,6 +338,7 @@ public abstract class PersistentCache<T extends CachedItem> {
             secondaryKeys = new Key[0];
         }
         cache = new ConcurrentMultiCache<T>(cls, primaryKey.getFields()[0]);
+        
         init(cls, keys);
         Class<?> current = cls;
         
@@ -393,6 +403,16 @@ public abstract class PersistentCache<T extends CachedItem> {
     }
 
     public abstract T get(Object keyValue) throws PersistenceException;
+    
+    /**
+     * Allows a client to retrieve an object by its secondary key(s).
+     * 
+     * 
+     * @param terms
+     * @return
+     * @throws PersistenceException
+     */
+    public abstract T get(SearchTerm... terms) throws PersistenceException;
 
     protected String getKeyValue(T object) throws PersistenceException {
         return getKeyValue(object, getPrimaryKey());
@@ -459,6 +479,42 @@ public abstract class PersistentCache<T extends CachedItem> {
                 }
                 Object result = map.get(fieldName);
 
+                if( result instanceof Enum ) {
+                    value = value + ((Enum)result).name();
+                }
+                else {
+                    value = value + result.toString();
+                }
+            }
+            return value;
+        }
+        catch( Exception e ) {
+            logger.error(e.getMessage(), e);
+            throw new PersistenceException(e);
+        }
+    }
+    
+    @SuppressWarnings("rawtypes")
+    protected String getKeyValue(SearchTerm[] forTerms, Key key) throws PersistenceException {
+        if( forTerms == null ) {
+            return null;
+        }
+        try {
+            String value = "";
+
+            for( String fieldName : key.getFields() ) {
+                if( !value.equals("") ) {
+                    value = value + ":";
+                }
+                
+                Object result = null;
+                for (SearchTerm term : forTerms) {
+                	if (term.getColumn().equals(fieldName)) {
+                		result = term.getValue();
+                		break;
+                	}
+                }
+                
                 if( result instanceof Enum ) {
                     value = value + ((Enum)result).name();
                 }
@@ -618,11 +674,25 @@ public abstract class PersistentCache<T extends CachedItem> {
         if( terms.length == 1 && terms[0].getColumn().equals(primaryKey.getFields()[0]) ) {
             return primaryKey ;
         }
+        if (logger.isDebugEnabled()) {
+        	logger.debug("checking secondary keys: " + secondaryKeys);
+        }
+        
         for( Key key : secondaryKeys ) {
+        	
+        	if (logger.isDebugEnabled()) {
+            	logger.debug("key : " + key + " key.length = " + key.getFields().length + " terms.length = " + terms.length);
+            }
+        	
             if( key.matches(terms) ) {
                 return key;
             }
         }
+        
+        if (logger.isDebugEnabled()) {
+        	logger.debug("no key matches");
+        }
+        
         return null;
     }
 
