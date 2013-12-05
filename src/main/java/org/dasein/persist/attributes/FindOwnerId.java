@@ -86,4 +86,9 @@ public class FindOwnerId extends Execution {
         attributes.put("results", values);
         return attributes;
     }
+    
+    @Override
+	public boolean isReadOnly() {
+		return true;
+	}
 }

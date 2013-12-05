@@ -113,4 +113,8 @@ public abstract class TranslatorLoader extends TranslationSql {
         return list;
     }    
 
+    @Override
+	public boolean isReadOnly() {
+		return true;
+	}
 }
