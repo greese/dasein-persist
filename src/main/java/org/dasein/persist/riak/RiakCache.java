@@ -393,10 +393,10 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                 code = client.executeMethod(post);
             }
             catch( HttpException e ) {
-                throw new PersistenceException("HttpException during POST: " + e.getMessage());
+                throw new PersistenceException("HttpException during POST to Riak at " + getEndpoint() +": " + e.getMessage());
             }
             catch( IOException e ) {
-                throw new PersistenceException("IOException during POST: " + e.getMessage());
+                throw new PersistenceException("IOException during POST to Riak at " + getEndpoint() +": " + e.getMessage());
             }
             try {
                 String body = post.getResponseBodyAsString();
@@ -694,11 +694,11 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                 }
                 catch( HttpException e ) {
                     std.error("HTTP exception during POST: " + e.getMessage());
-                    throw new PersistenceException("HttpException during POST: " + e.getMessage());
+                    throw new PersistenceException("HttpException during POST to Riak at " + getEndpoint() +": " + e.getMessage());
                 }
                 catch( IOException e ) {
                     std.error("I/O exception during POST: " + e.getMessage());
-                    throw new PersistenceException("I/O exception during POST: " + e.getMessage()); 
+                    throw new PersistenceException("I/O exception during POST to Riak at " + getEndpoint() +": " + e.getMessage());
                 }
                 try {
                     String body = post.getResponseBodyAsString();
@@ -893,10 +893,10 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                     code = client.executeMethod(post);
                 }
                 catch( HttpException e ) {
-                    throw new PersistenceException("HttpException during POST: " + e.getMessage());
+                    throw new PersistenceException("HttpException during POST to Riak at " + getEndpoint() +": " + e.getMessage());
                 }
                 catch( IOException e ) {
-                    throw new PersistenceException("IOException during POST: " + e.getMessage());
+                    throw new PersistenceException("IOException during POST to Riak at " + getEndpoint() +": " + e.getMessage());
                 }
                 try {
                     String body = post.getResponseBodyAsString();
@@ -1163,10 +1163,10 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                 code = client.executeMethod(get);
             }
             catch( HttpException e ) {
-                throw new PersistenceException("HttpException during GET: " + e.getMessage());
+                throw new PersistenceException("HttpException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
             }
             catch( IOException e ) {
-                throw new PersistenceException("IOException during GET: " + e.getMessage());
+                throw new PersistenceException("IOException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
             }
             try {
                 String json = get.getResponseBodyAsString();
@@ -1256,10 +1256,10 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                             code = client.executeMethod(get);
                         }
                         catch( HttpException e ) {
-                            throw new RuntimeException("HttpException during GET: " + e.getMessage());
+                            throw new RuntimeException("HttpException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
                         }
                         catch( IOException e ) {
-                            throw new RuntimeException("IOException during GET: " + e.getMessage());
+                            throw new RuntimeException("IOException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
                         }
                         try {
                             final String body = get.getResponseBodyAsString();
@@ -1497,10 +1497,10 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                     code = client.executeMethod(get);
                 }
                 catch( HttpException e ) {
-                    throw new PersistenceException("HttpException during GET: " + e.getMessage());
+                    throw new PersistenceException("HttpException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
                 }
                 catch( IOException e ) {
-                    throw new PersistenceException("IOException during GET: " + e.getMessage());
+                    throw new PersistenceException("IOException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
                 }
                 try {
                     final String body = get.getResponseBodyAsString();
@@ -1784,10 +1784,10 @@ public class RiakCache<T extends CachedItem> extends PersistentCache<T> {
                 code = client.executeMethod(delete);
             }
             catch( HttpException e ) {
-                throw new PersistenceException("HttpException during GET: " + e.getMessage());
+                throw new PersistenceException("HttpException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
             }
             catch( IOException e ) {
-                throw new PersistenceException("IOException during GET: " + e.getMessage());
+                throw new PersistenceException("IOException during GET to Riak at " + getEndpoint() +": " + e.getMessage());
             }
             try {
                 String body = delete.getResponseBodyAsString();
