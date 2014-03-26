@@ -20,9 +20,10 @@
 /* Copyright (c) 2006 Valtira Corporation, All Rights Reserved */
 package org.dasein.persist.jdbc;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
+import java.io.StringBufferInputStream;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.lang.reflect.*;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -45,6 +46,8 @@ import org.dasein.persist.l10n.LocalizationGroup;
 import org.dasein.util.CachedItem;
 import org.dasein.util.Translator;
 import org.dasein.util.uom.Measured;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 public class AutomatedSql extends Execution {
     static public enum Operator {
@@ -418,6 +421,28 @@ public class AutomatedSql extends Execution {
                 }
                 else {
                     statement.setString(i, ob.toString());
+                }
+            }
+            else if( t.isArray() ){
+                try {
+                    JSONArray serialized = new JSONArray();
+                    Class<?> componentType = t.getComponentType();
+                    Method toJson = componentType.getDeclaredMethod("toJSON");
+                    int length = Array.getLength(ob);
+                    for(int counter = 0 ; counter < length ; counter++){
+                        serialized.put(toJson.invoke(Array.get(ob, counter)));
+                    }
+                    StringWriter writer = new StringWriter();
+                    serialized.write(writer);
+                    statement.setString(i, writer.toString());
+                } catch (NoSuchMethodException e) {
+                    throw new SQLException("No toJSON method: " + t.getName(), e);
+                } catch (InvocationTargetException e) {
+                    throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+                } catch (IllegalAccessException e) {
+                    throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+                } catch (JSONException e) {
+                    throw new SQLException("Error serializing to JSON: " + t.getName(), e);
                 }
             }
             else {

@@ -376,7 +376,7 @@ public abstract class Execution {
             }
             catch( SQLException e ) {
                 logger.debug("Error executing event: " + e.getMessage(), e);
-                throw new PersistenceException(e.getMessage());
+                throw new PersistenceException(e);
             }
         }
         finally {

@@ -20,9 +20,7 @@
 /* Copyright (c) 2006 Valtira Corporation, All Rights Reserved */
 package org.dasein.persist.jdbc;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -40,6 +38,9 @@ import org.dasein.persist.l10n.LocalizationGroup;
 import org.dasein.util.CachedItem;
 import org.dasein.util.uom.Measured;
 import org.dasein.util.uom.UnitOfMeasure;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class Loader extends AutomatedSql {
     static public final Logger logger = Logger.getLogger(Loader.class);
@@ -349,6 +350,34 @@ public class Loader extends AutomatedSql {
             if( rs.wasNull() ) {
                 ob = null;
             }
+        }else if(type.isArray()){
+            try {
+                JSONArray object = new JSONArray(rs.getString(i));
+                Class<?> componentType = type.getComponentType();
+                Method m = componentType.getDeclaredMethod("valueOf", JSONObject.class);
+                Object newArray = Array.newInstance(componentType, object.length());
+                for(int counter = 0 ; counter < object.length() ; counter++){
+                    Array.set(newArray, counter, m.invoke(null, object.get(counter)));
+                }
+                ob = newArray;
+            } catch (JSONException e) {
+                throw new SQLException("Error parsing json: " + type.getName(), e);
+            } catch (NoSuchMethodException e) {
+                throw new SQLException(
+                        "No valueOf function for loading JSON: " + type.getName(),
+                        e
+                );
+            } catch (InvocationTargetException e) {
+                throw new SQLException(
+                        "Failed to invoke valueOf function for loading JSON: " + type.getName(),
+                        e
+                );
+            } catch (IllegalAccessException e) {
+                throw new SQLException(
+                        "Failed to invoke valueOf function for loading JSON: " + type.getName(),
+                        e
+                );
+            }
         }
         else {
             String str = rs.getString(i);
@@ -359,11 +388,11 @@ public class Loader extends AutomatedSql {
             else {
                 try {
                     Method m = type.getDeclaredMethod("valueOf", String.class);
-                    
+
                     ob = m.invoke(null, str);
                 }
                 catch( Exception e ) {
-                    throw new SQLException("I have no idea how to map to " + type.getName());
+                    throw new SQLException("I have no idea how to map to " + type.getName(), e);
                 }
             }
         }
