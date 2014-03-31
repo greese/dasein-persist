@@ -423,24 +423,62 @@ public class AutomatedSql extends Execution {
                     statement.setString(i, ob.toString());
                 }
             }
+            else if (t.isEnum()){
+                statement.setObject(i, ob.toString());
+            }
             else if( t.isArray() ){
-                try {
-                    JSONArray serialized = new JSONArray();
-                    Class<?> componentType = t.getComponentType();
-                    Method toJson = componentType.getDeclaredMethod("toJSON");
-                    int length = Array.getLength(ob);
-                    for(int counter = 0 ; counter < length ; counter++){
-                        serialized.put(toJson.invoke(Array.get(ob, counter)));
+                Class<?> componentType = t.getComponentType();
+                int length = Array.getLength(ob);
+                JSONArray serialized = new JSONArray();
+                Class[] primitiveTypes = new Class[]{
+                        Boolean.class,
+                        Boolean.TYPE,
+                        Integer.class,
+                        Integer.TYPE,
+                        Double.class,
+                        Double.TYPE,
+                        Float.class,
+                        Float.TYPE,
+                        Long.class,
+                        Long.TYPE,
+                        Short.class,
+                        Short.TYPE,
+                        Character.class,
+                        Character.TYPE,
+                        Byte.class,
+                        Byte.TYPE,
+                        String.class
+                };
+                boolean isPrimitive = false;
+                for(Class<?> clazz: primitiveTypes){
+                    if(clazz.equals(componentType) || clazz.isAssignableFrom(componentType)){
+                        isPrimitive = true;
+                        break;
                     }
+                }
+                if(isPrimitive){
+                    for(int counter = 0 ; counter < length; counter++ ){
+                        serialized.put(Array.get(ob, counter));
+                    }
+                } else {
+                    try {
+                        Method toJson = componentType.getDeclaredMethod("toJSON");
+                        for (int counter = 0; counter < length; counter++) {
+                            serialized.put(toJson.invoke(Array.get(ob, counter)));
+                        }
+                    } catch (NoSuchMethodException e) {
+                        throw new SQLException("No toJSON method: " + t.getName(), e);
+                    } catch (InvocationTargetException e) {
+                        throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+                    } catch (IllegalAccessException e) {
+                        throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+                    }
+                }
+                try {
                     StringWriter writer = new StringWriter();
                     serialized.write(writer);
                     statement.setString(i, writer.toString());
-                } catch (NoSuchMethodException e) {
-                    throw new SQLException("No toJSON method: " + t.getName(), e);
-                } catch (InvocationTargetException e) {
-                    throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
-                } catch (IllegalAccessException e) {
-                    throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+
                 } catch (JSONException e) {
                     throw new SQLException("Error serializing to JSON: " + t.getName(), e);
                 }
