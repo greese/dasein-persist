@@ -20,9 +20,10 @@
 /* Copyright (c) 2006 Valtira Corporation, All Rights Reserved */
 package org.dasein.persist.jdbc;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
+import java.io.StringBufferInputStream;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.lang.reflect.*;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -45,6 +46,8 @@ import org.dasein.persist.l10n.LocalizationGroup;
 import org.dasein.util.CachedItem;
 import org.dasein.util.Translator;
 import org.dasein.util.uom.Measured;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 public class AutomatedSql extends Execution {
     static public enum Operator {
@@ -418,6 +421,66 @@ public class AutomatedSql extends Execution {
                 }
                 else {
                     statement.setString(i, ob.toString());
+                }
+            }
+            else if (t.isEnum()){
+                statement.setObject(i, ob.toString());
+            }
+            else if( t.isArray() ){
+                Class<?> componentType = t.getComponentType();
+                int length = Array.getLength(ob);
+                JSONArray serialized = new JSONArray();
+                Class[] primitiveTypes = new Class[]{
+                        Boolean.class,
+                        Boolean.TYPE,
+                        Integer.class,
+                        Integer.TYPE,
+                        Double.class,
+                        Double.TYPE,
+                        Float.class,
+                        Float.TYPE,
+                        Long.class,
+                        Long.TYPE,
+                        Short.class,
+                        Short.TYPE,
+                        Character.class,
+                        Character.TYPE,
+                        Byte.class,
+                        Byte.TYPE,
+                        String.class
+                };
+                boolean isPrimitive = false;
+                for(Class<?> clazz: primitiveTypes){
+                    if(clazz.equals(componentType) || clazz.isAssignableFrom(componentType)){
+                        isPrimitive = true;
+                        break;
+                    }
+                }
+                if(isPrimitive){
+                    for(int counter = 0 ; counter < length; counter++ ){
+                        serialized.put(Array.get(ob, counter));
+                    }
+                } else {
+                    try {
+                        Method toJson = componentType.getDeclaredMethod("toJSON");
+                        for (int counter = 0; counter < length; counter++) {
+                            serialized.put(toJson.invoke(Array.get(ob, counter)));
+                        }
+                    } catch (NoSuchMethodException e) {
+                        throw new SQLException("No toJSON method: " + t.getName(), e);
+                    } catch (InvocationTargetException e) {
+                        throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+                    } catch (IllegalAccessException e) {
+                        throw new SQLException("Error invoking toJSON method: " + t.getName(), e);
+                    }
+                }
+                try {
+                    StringWriter writer = new StringWriter();
+                    serialized.write(writer);
+                    statement.setString(i, writer.toString());
+
+                } catch (JSONException e) {
+                    throw new SQLException("Error serializing to JSON: " + t.getName(), e);
                 }
             }
             else {

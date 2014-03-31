@@ -3,7 +3,7 @@
 
   <groupId>org.dasein</groupId>
   <artifactId>dasein-persist</artifactId>
-  <version>2013.02.1-SNAPSHOT</version>
+  <version>x2013.02.3</version>
   <packaging>jar</packaging>
 
   <name>dasein-persist</name>
@@ -77,7 +77,7 @@
     <dependency>
         <groupId>mysql</groupId>
         <artifactId>mysql-connector-java</artifactId>
-        <version>5.1.10</version>
+        <version>5.1.29</version>
         <scope>test</scope>
     </dependency>           
     <dependency>

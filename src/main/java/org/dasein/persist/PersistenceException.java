@@ -60,13 +60,14 @@ public class PersistenceException extends Exception {
         super(msg);
     }
 
+
     /**
      * Constructs a new persistence exception that results from the
      * specified data store exception.
      * @param cse the cause for this persistence exception
      */
     public PersistenceException(Exception cse) {
-        super(cse.getMessage());
+        super(cse.getMessage(), cse);
         cause = cse;
     }
 
